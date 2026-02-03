@@ -1,0 +1,19 @@
+from neo4j import GraphDatabase
+from langchain.tools import tool
+from langgraph.prebuilt import ToolRuntime
+
+from config import Config
+
+
+# noinspection PyIncorrectDocstring
+@tool(parse_docstring=True)
+def execute_cypher(cypher: str, explanation: str, runtime: ToolRuntime[Config]) -> str:
+    """Execute a Cypher query against the Neo4j database.
+
+    Args:
+        cypher (str): The Cypher query to execute.
+        explanation (str): A short, user-facing explainer (a few words) that tells the user what you're doing right now.
+    """
+    with GraphDatabase.driver(runtime.context.neo4j_uri, auth=runtime.context.neo4j_auth) as driver:
+        results = driver.execute_query(cypher)
+    return '\n'.join((str(record) for record in results.records))

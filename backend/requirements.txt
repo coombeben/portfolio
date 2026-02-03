@@ -1,0 +1,6 @@
+pydantic==2.12.4
+pydantic-settings==2.12.0
+langchain==1.0.7
+langchain-google-genai==4.2.0
+langgraph==1.0.3
+neo4j==6.1.0
