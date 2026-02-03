@@ -1,8 +1,11 @@
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 from langchain.messages import AnyMessage, HumanMessage, AIMessage
 from langgraph.graph import add_messages
+
+
+AudienceMode = Literal['technical', 'non-technical']
 
 
 # Structured output for the moderation node
@@ -15,6 +18,7 @@ class ModerationDecision(BaseModel):
 # Internal state of the agent
 class State(BaseModel):
     messages: Annotated[list[AnyMessage], add_messages]
+    audience_mode: AudienceMode = 'technical'
     moderation_decision: ModerationDecision | None = None
 
     def to_moderator_inputs(self) -> HumanMessage:

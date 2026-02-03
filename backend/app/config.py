@@ -2,7 +2,7 @@ import os
 from functools import cache
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings
 from langchain.chat_models import  init_chat_model, BaseChatModel
 
@@ -20,8 +20,8 @@ class LLMConfig(BaseModel):
 
 
 class Config(BaseSettings):
-    neo4j_uri: str = os.environ.get('NEO4J_URI')
-    neo4j_auth: tuple[str, str] = tuple(os.environ.get('NEO4J_AUTH').split('/', 1))
+    neo4j_uri: str = Field(env='NEO4J_URI')
+    neo4j_auth: tuple[str, str] | None = Field(None, env='NEO4J_AUTH')
     enable_moderation: bool = True
 
     # LLM options
@@ -35,6 +35,19 @@ class Config(BaseSettings):
         name='gemini-3-flash-preview',
         kwargs={'thinking_level': 'low'}
     )
+
+    @field_validator('neo4j_auth', mode='before')
+    def _parse_neo4j_auth(cls, v: str | None) -> tuple[str, str] | None:
+        if v is None:
+            return None
+        if isinstance(v, str):
+            parts = v.split('/', 1)
+            if len(parts) != 2:
+                raise ValueError('NEO4J_AUTH must be in the form username/password')
+            return parts[0], parts[1]
+        if isinstance(v, (list, tuple)) and len(v) == 2:
+            return v[0], v[1]
+        raise TypeError('Invalid type for NEO4J_AUTH')
 
 
 class DevelopmentConfig(Config):

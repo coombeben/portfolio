@@ -11,7 +11,7 @@ from langgraph.runtime import Runtime
 from config import Config
 from .tools import execute_cypher
 from .models import ModerationDecision, State
-from .prompts import moderation_instructions, chatbot_instructions
+from .prompts import moderation_instructions, get_chatbot_prompt
 
 __all__ = ['graph']
 
@@ -54,7 +54,7 @@ def refusal(state: State) -> dict:
 def chatbot(state: State, runtime: Runtime[Config]) -> dict:
     """Creates cypher queries and responds to the user message."""
     messages = [
-        SystemMessage(chatbot_instructions),
+        SystemMessage(get_chatbot_prompt(state.audience_mode)),
         *state.messages,
     ]
     response = (
