@@ -1,12 +1,14 @@
-import os
 from functools import cache
-from typing import Literal
+from typing import Literal, TYPE_CHECKING, Self
 
 from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings
-from langchain.chat_models import  init_chat_model, BaseChatModel
+from langchain.chat_models import init_chat_model, BaseChatModel
 
-__all__ = ['Config', 'get_config']
+if TYPE_CHECKING:
+    from neo4j import Driver
+
+__all__ = ['Config', 'get_config', 'AgentContext']
 
 
 class LLMConfig(BaseModel):
@@ -21,7 +23,14 @@ class LLMConfig(BaseModel):
 
 class Config(BaseSettings):
     neo4j_uri: str = Field(env='NEO4J_URI')
-    neo4j_auth: tuple[str, str] | None = Field(None, env='NEO4J_AUTH')
+    neo4j_user: str = Field('neo4j', env='NEO4J_USER')
+    neo4j_password: str = Field('', env='NEO4J_PASSWORD')
+
+    postgres_uri: str = Field(env='POSTGRES_URI')
+    postgres_user: str = Field(env='POSTGRES_USER')
+    postgres_password: str = Field(env='POSTGRES_PASSWORD')
+    postgres_db: str = Field(env='POSTGRES_DB')
+
     enable_moderation: bool = True
 
     # LLM options
@@ -35,19 +44,6 @@ class Config(BaseSettings):
         name='gemini-3-flash-preview',
         kwargs={'thinking_level': 'low'}
     )
-
-    @field_validator('neo4j_auth', mode='before')
-    def _parse_neo4j_auth(cls, v: str | None) -> tuple[str, str] | None:
-        if v is None:
-            return None
-        if isinstance(v, str):
-            parts = v.split('/', 1)
-            if len(parts) != 2:
-                raise ValueError('NEO4J_AUTH must be in the form username/password')
-            return parts[0], parts[1]
-        if isinstance(v, (list, tuple)) and len(v) == 2:
-            return v[0], v[1]
-        raise TypeError('Invalid type for NEO4J_AUTH')
 
 
 class DevelopmentConfig(Config):
@@ -63,9 +59,26 @@ ConfigType = Literal['development', 'production']
 
 
 @cache
-def get_config(config_type: ConfigType) -> Config:
+def get_config(config_type: ConfigType = 'production') -> Config:
     """Returns the configuration object based on the environment."""
     if config_type == 'development':
         return DevelopmentConfig()
 
     return ProductionConfig()
+
+
+class AgentContext(BaseModel):
+    """Runtime context passed to LangGraph nodes and tools.
+
+    Contains only what the agent needs during execution.
+    Infrastructure concerns (checkpointer, connection strings) are not included.
+    """
+    model_config = {'arbitrary_types_allowed': True}
+
+    # What nodes need
+    moderator_llm: LLMConfig
+    chat_llm: LLMConfig
+    enable_moderation: bool
+
+    # What tools need
+    neo4j_driver: 'Driver'

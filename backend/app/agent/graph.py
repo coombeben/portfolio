@@ -1,6 +1,4 @@
-"""
-
-"""
+"""LangGraph agent definition."""
 from typing import Literal
 
 from langchain.messages import SystemMessage, AIMessage
@@ -8,7 +6,7 @@ from langgraph.graph import StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.runtime import Runtime
 
-from config import Config
+from app.config import AgentContext
 from .tools import execute_cypher
 from .models import ModerationDecision, State
 from .prompts import moderation_instructions, get_chatbot_prompt
@@ -19,7 +17,7 @@ __all__ = ['graph']
 tools = [execute_cypher]
 
 
-def moderator(state: State, runtime: Runtime[Config]) -> dict:
+def moderator(state: State, runtime: Runtime[AgentContext]) -> dict:
     """Verify the content of the message."""
     messages = [
         SystemMessage(moderation_instructions),
@@ -51,7 +49,7 @@ def refusal(state: State) -> dict:
     return {'messages': [AIMessage(content=refusal_message)]}
 
 
-def chatbot(state: State, runtime: Runtime[Config]) -> dict:
+def chatbot(state: State, runtime: Runtime[AgentContext]) -> dict:
     """Creates cypher queries and responds to the user message."""
     messages = [
         SystemMessage(get_chatbot_prompt(state.audience_mode)),
@@ -69,7 +67,7 @@ def chatbot(state: State, runtime: Runtime[Config]) -> dict:
 tool_node = ToolNode(tools)
 
 graph = (
-    StateGraph(State, context_schema=Config)
+    StateGraph(State, context_schema=AgentContext)
     .add_node('moderator', moderator)
     .add_node('chatbot', chatbot)
     .add_node('refusal', refusal)
