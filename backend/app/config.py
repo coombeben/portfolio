@@ -1,12 +1,12 @@
 from functools import cache
-from typing import Literal, TYPE_CHECKING, Self
+from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings
 from langchain.chat_models import init_chat_model, BaseChatModel
+from langgraph.runtime import Runtime
+from neo4j import Driver
 
-if TYPE_CHECKING:
-    from neo4j import Driver
 
 __all__ = ['Config', 'get_config', 'AgentContext']
 
@@ -82,3 +82,10 @@ class AgentContext(BaseModel):
 
     # What tools need
     neo4j_driver: 'Driver'
+
+    def to_langgraph_config(self) -> dict:
+        """Converts to a LangGraph runtime config dictionary.
+
+        This is a slightly hacky way to pass the Neo4j driver to the runtime.
+        """
+        return {'__pregel_runtime': Runtime(context=self)}
