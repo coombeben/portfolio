@@ -34,9 +34,8 @@ class DatabaseManager:
             f"postgresql://{self.config.postgres_user}:{self.config.postgres_password}"
             f"@{self.config.postgres_uri}/{self.config.postgres_db}"
         )
-        # Don't implicitly open in the constructor (deprecated)
         self._pg_pool = AsyncConnectionPool(dsn, open=False)
-        await self._pg_pool.open()
+        await self._pg_pool.open(wait=True)
 
         # Keep one dedicated connection for the checkpointer for the whole lifespan.
         self._pg_conn_ctx = self._pg_pool.connection()

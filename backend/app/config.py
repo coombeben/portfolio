@@ -7,6 +7,8 @@ from langchain.chat_models import init_chat_model, BaseChatModel
 from langgraph.runtime import Runtime
 from neo4j import Driver
 
+from app.projector import ProjectionConfig
+
 
 __all__ = ['Config', 'get_config', 'AgentContext']
 
@@ -23,7 +25,7 @@ class LLMConfig(BaseModel):
 
 class Config(BaseSettings):
     neo4j_uri: str = Field(env='NEO4J_URI')
-    neo4j_user: str = Field('neo4j', env='NEO4J_USER')
+    neo4j_user: str = Field(env='NEO4J_USER')
     neo4j_password: str = Field('', env='NEO4J_PASSWORD')
 
     postgres_uri: str = Field(env='POSTGRES_URI')
@@ -45,14 +47,23 @@ class Config(BaseSettings):
         kwargs={'thinking_level': 'low'}
     )
 
+    # Content redaction
+    projection_config: ProjectionConfig
+
 
 class DevelopmentConfig(Config):
-    neo4j_uri: str = 'neo4j://localhost:7687'
     enable_moderation: bool = False
+
+    projection_config = ProjectionConfig()
 
 
 class ProductionConfig(Config):
-    pass
+    # Redact sensitive content for prod
+    projection_config = ProjectionConfig(
+        exclude_nodes={"moderator"},
+        redact_tool_args={"execute_cypher": {"cypher"}},
+        redact_tool_results={"execute_cypher"},
+    )
 
 
 ConfigType = Literal['development', 'production']

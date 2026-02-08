@@ -3,16 +3,15 @@ load_dotenv()
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-from copilotkit import LangGraphAGUIAgent
-from ag_ui.core.types import RunAgentInput
-from ag_ui.encoder import EventEncoder
 
 from app.mock_agent import graph
 from app.config import get_config, AgentContext
 from app.database import DatabaseManager
+from app.encoder import SSEEventEncoder
+from app.projector import AgentEventProjector, StreamInputs
 
 config = get_config('development')
 
@@ -24,25 +23,18 @@ async def lifespan(app: FastAPI):
     db_manager = DatabaseManager(config)
     await db_manager.connect()
 
-    context = AgentContext(
-        moderator_llm=config.moderator_llm,
-        chat_llm=config.chat_llm,
-        enable_moderation=config.enable_moderation,
-        neo4j_driver=db_manager.neo4j_driver,
-    )
-
-    # Create checkpointer on a dedicated long-lived connection
     checkpointer = AsyncPostgresSaver(db_manager.pg_conn)
     await checkpointer.setup()
-    compiled_graph = graph.compile(checkpointer=checkpointer)
-    agent = LangGraphAGUIAgent(
-        name="langgraph-agent",
-        graph=compiled_graph,
-        config=context.to_langgraph_config(),
+
+    agent = graph.compile(checkpointer=checkpointer)
+    projector = AgentEventProjector(
+        agent=agent,
+        config=config.projection_config
     )
 
     # Store on app state so request handlers can access it safely
-    app.state.agent = agent
+    app.state.projector = projector
+    app.state.db_manager = db_manager
 
     try:
         yield
@@ -55,20 +47,23 @@ app = FastAPI(lifespan=lifespan)
 
 
 @app.post('/')
-async def langgraph_agent_endpoint(input_data: RunAgentInput, request: Request):
-    # Get the accept header from the request
-    accept_header = request.headers.get("accept")
+async def langgraph_agent_endpoint(input_data: StreamInputs):
+    encoder = SSEEventEncoder()
 
-    # Create an event encoder to properly format SSE events
-    encoder = EventEncoder(accept=accept_header)
+    context = AgentContext(
+        moderator_llm=config.moderator_llm,
+        chat_llm=config.chat_llm,
+        enable_moderation=config.enable_moderation,
+        neo4j_driver=app.state.db_manager.neo4j_driver,
+    )
 
     async def event_generator():
-        async for event in app.state.agent.run(input_data):
+        async for event in app.state.projector.astream(input_data, context=context):
             yield encoder.encode(event)
 
     return StreamingResponse(
         event_generator(),
-        media_type=encoder.get_content_type()
+        media_type=encoder.media_type
     )
 
 
