@@ -5,9 +5,8 @@ import json
 from typing import Any, AsyncIterator, Iterable, Iterator, Optional
 
 from pydantic import BaseModel, Field
-from langgraph.graph.state import CompiledStateGraph
-
-from .events import (
+from langgraph.graph.state import CompiledStateGraph, RunnableConfig
+from ag_ui.core import (
     BaseEvent,
     RunStartedEvent,
     RunFinishedEvent,
@@ -47,9 +46,16 @@ class AgentEventProjector:
         tool_started: set[str] = set()
         tool_args_emitted: set[str] = set()
 
+        config = RunnableConfig(
+            run_id=inputs.run_id,
+            configurable={
+                'thread_id': inputs.thread_id
+            }
+        )
+
         yield RunStartedEvent(run_id=inputs.run_id, thread_id=inputs.thread_id)
         try:
-            for item in self._agent.stream(inputs.state, context=context, stream_mode="messages"):
+            for item in self._agent.stream(inputs.state, config=config, context=context, stream_mode="messages"):
                 message, meta = self._split_event(item)
                 node = self._extract_node(meta)
                 if node and node in self._config.exclude_nodes:
@@ -72,9 +78,7 @@ class AgentEventProjector:
             yield RunFinishedEvent(run_id=inputs.run_id, thread_id=inputs.thread_id)
         except Exception as exc:  # noqa: BLE001
             yield RunErrorEvent(
-                run_id=inputs.run_id,
-                thread_id=inputs.thread_id,
-                error_message=str(exc),
+                message=str(exc),
             )
             raise
 
@@ -84,9 +88,16 @@ class AgentEventProjector:
         tool_started: set[str] = set()
         tool_args_emitted: set[str] = set()
 
+        config = RunnableConfig(
+            run_id=inputs.run_id,
+            configurable={
+                'thread_id': inputs.thread_id
+            }
+        )
+
         yield RunStartedEvent(run_id=inputs.run_id, thread_id=inputs.thread_id)
         try:
-            async for item in self._agent.astream(inputs.state, context=context, stream_mode="messages"):
+            async for item in self._agent.astream(inputs.state, config=config, context=context, stream_mode="messages"):
                 message, meta = self._split_event(item)
                 node = self._extract_node(meta)
                 if node and node in self._config.exclude_nodes:
@@ -109,9 +120,7 @@ class AgentEventProjector:
             yield RunFinishedEvent(run_id=inputs.run_id, thread_id=inputs.thread_id)
         except Exception as exc:  # noqa: BLE001
             yield RunErrorEvent(
-                run_id=inputs.run_id,
-                thread_id=inputs.thread_id,
-                error_message=str(exc),
+                message=str(exc),
             )
             raise
 

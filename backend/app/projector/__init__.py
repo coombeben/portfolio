@@ -1,2 +1,1 @@
-from events import *
-from projector import AgentEventProjector, ProjectionConfig, StreamInputs
+from .projector import AgentEventProjector, ProjectionConfig, StreamInputs

@@ -48,18 +48,16 @@ class Config(BaseSettings):
     )
 
     # Content redaction
-    projection_config: ProjectionConfig
+    projection_config: ProjectionConfig = Field(default_factory=ProjectionConfig)
 
 
 class DevelopmentConfig(Config):
     enable_moderation: bool = False
 
-    projection_config = ProjectionConfig()
-
 
 class ProductionConfig(Config):
     # Redact sensitive content for prod
-    projection_config = ProjectionConfig(
+    projection_config: ProjectionConfig = ProjectionConfig(
         exclude_nodes={"moderator"},
         redact_tool_args={"execute_cypher": {"cypher"}},
         redact_tool_results={"execute_cypher"},

@@ -1,19 +1,24 @@
+import uuid
+import warnings
+from contextlib import asynccontextmanager
+
 from dotenv import load_dotenv
 load_dotenv()
 
-from contextlib import asynccontextmanager
-
-from fastapi import FastAPI
+from pydantic.warnings import UnsupportedFieldAttributeWarning
+from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from ag_ui.core import RunAgentInput
+from ag_ui.encoder import EventEncoder
 
-from app.mock_agent import graph
+from app.mock_agent import graph, State
 from app.config import get_config, AgentContext
 from app.database import DatabaseManager
-from app.encoder import SSEEventEncoder
 from app.projector import AgentEventProjector, StreamInputs
 
 config = get_config('development')
+warnings.simplefilter("ignore", category=UnsupportedFieldAttributeWarning)
 
 
 @asynccontextmanager
@@ -46,10 +51,19 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 
-@app.post('/')
-async def langgraph_agent_endpoint(input_data: StreamInputs):
-    encoder = SSEEventEncoder()
+@app.post('/conversation')
+async def langgraph_agent_endpoint(input_data: RunAgentInput, request: Request):
+    # Get the accept header from the request
+    accept_header = request.headers.get("accept")
 
+    # Create an event encoder to properly format SSE events
+    encoder = EventEncoder(accept=accept_header)
+
+    stream_inputs = StreamInputs(
+        state=input_data.state,
+        run_id=str(uuid.uuid4()),
+        thread_id=str(input_data.thread_id)
+    )
     context = AgentContext(
         moderator_llm=config.moderator_llm,
         chat_llm=config.chat_llm,
@@ -58,12 +72,12 @@ async def langgraph_agent_endpoint(input_data: StreamInputs):
     )
 
     async def event_generator():
-        async for event in app.state.projector.astream(input_data, context=context):
+        async for event in app.state.projector.astream(stream_inputs, context=context):
             yield encoder.encode(event)
 
     return StreamingResponse(
         event_generator(),
-        media_type=encoder.media_type
+        media_type=encoder.get_content_type()
     )
 
 
