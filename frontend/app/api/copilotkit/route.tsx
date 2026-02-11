@@ -9,7 +9,7 @@ import { NextRequest } from "next/server";
 const serviceAdapter = new ExperimentalEmptyAdapter();
 
 const agent = new HttpAgent({
-  url: process.env.LANGGRAPH_DEPLOYMENT_URL || "http://localhost:8000/conversation",
+  url: process.env.LANGGRAPH_DEPLOYMENT_URL || "http://localhost:8000/chat/stream",
   // headers: {
     // Authorization: `Bearer ${process.env.LANGGRAPH_DEPLOYMENT_API_KEY}`,
   // }
