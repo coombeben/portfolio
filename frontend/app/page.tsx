@@ -1,8 +1,73 @@
-import { CopilotChat } from "@copilotkit/react-ui";
+"use client";
+import { CopilotChat, CopilotKitCSSProperties } from "@copilotkit/react-ui";
+import { useRenderToolCall } from "@copilotkit/react-core";
+
+function ToolCallStatus({
+  explanation,
+  status,
+}: {
+  explanation: string;
+  status: "inProgress" | "complete" | (string & {});
+}) {
+  const isInProgress = status === "inProgress";
+
+  return (
+    <div className="toolCallStatus" aria-live="polite">
+      <div
+        className="toolCallStatus__iconWrap"
+        aria-hidden="true"
+        title={isInProgress ? "In progress" : "Complete"}
+      >
+        {isInProgress ? (
+          <span className="toolCallStatus__spinner" />
+        ) : (
+          <svg
+            className="toolCallStatus__tick"
+            viewBox="0 0 24 24"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M4.89163 13.2687L9.16582 17.5427L18.7085 8"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        )}
+      </div>
+      <div className="toolCallStatus__text">
+        <div className="toolCallStatus__label">{explanation}</div>
+        <div className="toolCallStatus__meta">
+          {isInProgress ? "Running…" : "Done"}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Page() {
+  useRenderToolCall({
+    name: "execute_cypher",
+    render: ({ args, status }) => {
+      return (
+        <ToolCallStatus
+          explanation={args?.explanation ?? "Working"}
+          status={status}
+        />
+      );
+    },
+  });
+
   return (
-    <main>
+    <main
+      style={
+        {
+          "--copilot-kit-primary-color": "#4F46E5",
+        } as CopilotKitCSSProperties
+      }
+    >
       <h1>Your App</h1>
       <CopilotChat />
     </main>
