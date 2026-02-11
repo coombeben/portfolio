@@ -1,3 +1,4 @@
+import time
 import uuid
 from typing import Annotated
 
@@ -17,7 +18,7 @@ class State(BaseModel):
 
 
 @tool(parse_docstring=True)
-def execute_cypher(cypher: str, explanation: str, runtime: ToolRuntime[AgentContext]) -> str:
+async def execute_cypher(cypher: str, explanation: str, runtime: ToolRuntime[AgentContext]) -> str:
     """Execute a Cypher query against the Neo4j database.
 
     Args:
@@ -26,7 +27,8 @@ def execute_cypher(cypher: str, explanation: str, runtime: ToolRuntime[AgentCont
     """
     # Use the shared, pooled driver
     driver = runtime.context.neo4j_driver
-    results = driver.execute_query(cypher)
+    results = await driver.execute_query(cypher)
+    time.sleep(2)
     return '\n'.join((str(record) for record in results.records))
 
 

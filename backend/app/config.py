@@ -4,8 +4,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings
 from langchain.chat_models import init_chat_model, BaseChatModel
-from langgraph.runtime import Runtime
-from neo4j import Driver
+from neo4j import AsyncDriver
 
 from app.projector import ProjectionConfig
 
@@ -35,6 +34,9 @@ class Config(BaseSettings):
 
     enable_moderation: bool = True
 
+    # Rate limiting
+    daily_limit: int = 10
+
     # LLM options
     moderator_llm: LLMConfig = LLMConfig(
         provider='google_genai',
@@ -53,6 +55,7 @@ class Config(BaseSettings):
 
 class DevelopmentConfig(Config):
     enable_moderation: bool = False
+    daily_limit: int = 1000
 
 
 class ProductionConfig(Config):
@@ -90,4 +93,4 @@ class AgentContext(BaseModel):
     enable_moderation: bool
 
     # What tools need
-    neo4j_driver: 'Driver'
+    neo4j_driver: 'AsyncDriver'

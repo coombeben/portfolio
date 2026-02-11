@@ -27,12 +27,12 @@ class State(BaseModel):
         for message in self.messages:
             if isinstance(message, HumanMessage):
                 # Add full human messages to the moderator input
-                message_content += f'Human: {message.content}\n'
+                message_content += f'<human>{message.content}</human>\n'
             elif isinstance(message, AIMessage):
                 # Only show the first 50 characters of AI messages,
                 # they're not all that important for moderation
                 ai_content = message.content if len(message.content) <= 50 else f'{message.content[:50]}...'
-                message_content += f'AI: {ai_content}\n'
+                message_content += f'<assistant>{ai_content}</assistant>\n'
             # Ignore ToolMessages for moderation
 
         return HumanMessage(content=message_content)

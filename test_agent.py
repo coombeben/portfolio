@@ -8,11 +8,11 @@ load_dotenv()
 from langchain.messages import HumanMessage
 from langgraph.graph.state import CompiledStateGraph
 
-from backend.app.database import DatabaseManager
-from backend.app.agent_wrapper import ProjectionConfig, StreamInputs, AgentEventProjector
-from backend.app.agent.graph import graph
-from backend.app.agent.models import State
-from backend.app.config import get_config, AgentContext
+from app.database import DatabaseManager
+from app.agent_wrapper import ProjectionConfig, StreamInputs, AgentEventProjector
+from app.agent.graph import graph
+from app.agent.models import State
+from app.config import get_config, AgentContext
 
 
 if sys.platform == "win32":
