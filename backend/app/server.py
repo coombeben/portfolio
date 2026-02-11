@@ -15,9 +15,9 @@ from ag_ui.encoder import EventEncoder
 from app.mock_agent import graph, State
 from app.config import get_config, AgentContext
 from app.database import DatabaseManager
-from app.projector import AgentEventProjector, StreamInputs
+from app.projector import AgentEventProjector, StreamInputs, agui_messages_to_langchain
 
-config = get_config('development')
+config = get_config('production')
 warnings.simplefilter("ignore", category=UnsupportedFieldAttributeWarning)
 
 
@@ -59,8 +59,11 @@ async def langgraph_agent_endpoint(input_data: RunAgentInput, request: Request):
     # Create an event encoder to properly format SSE events
     encoder = EventEncoder(accept=accept_header)
 
+    state = State(
+        messages=agui_messages_to_langchain(input_data.messages),
+    )
     stream_inputs = StreamInputs(
-        state=input_data.state,
+        state=state,
         run_id=str(uuid.uuid4()),
         thread_id=str(input_data.thread_id)
     )

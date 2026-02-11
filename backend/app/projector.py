@@ -1,11 +1,14 @@
 """
-
+AgentEventProjector: A class to project LangGraph agent streams into a sequence of AG-UI protocol
+events for UI consumption, with support for configurable redaction of sensitive information.
 """
 import json
-from typing import Any, AsyncIterator, Iterable, Iterator, Optional
+from typing import Any, AsyncIterator, Iterable, Iterator, Optional, Union
 
 from pydantic import BaseModel, Field
-from langgraph.graph.state import CompiledStateGraph, RunnableConfig
+from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage, ToolMessage, HumanMessage, SystemMessage
+from langchain_core.runnables import RunnableConfig
+from langgraph.graph.state import CompiledStateGraph
 from ag_ui.core import (
     BaseEvent,
     RunStartedEvent,
@@ -17,8 +20,18 @@ from ag_ui.core import (
     ToolCallStartEvent,
     ToolCallArgsEvent,
     ToolCallEndEvent,
-    ToolCallResultEvent
+    ToolCallResultEvent,
+    Message as AGUIMessage,
+    TextInputContent,
+    BinaryInputContent,
 )
+
+__all__ = [
+    'StreamInputs',
+    'ProjectionConfig',
+    'agui_messages_to_langchain',
+    'AgentEventProjector',
+]
 
 
 class StreamInputs(BaseModel):
@@ -34,9 +47,90 @@ class ProjectionConfig(BaseModel):
     redaction_text: str = "[REDACTED]"
 
 
+# Stolen from ag-ui-langgraph
+def convert_agui_multimodal_to_langchain(content: list[TextInputContent | BinaryInputContent]) -> list[dict[str, Any]]:
+    """Convert AG-UI multimodal content to LangChain's multimodal format."""
+    langchain_content = []
+    for item in content:
+        if isinstance(item, TextInputContent):
+            langchain_content.append({
+                "type": "text",
+                "text": item.text
+            })
+        elif isinstance(item, BinaryInputContent):
+            # LangChain uses image_url format (OpenAI-style)
+            content_dict = {"type": "image_url"}
+
+            # Prioritize url, then data, then id
+            if item.url:
+                content_dict["image_url"] = {"url": item.url}
+            elif item.data:
+                # Construct data URL from base64 data
+                content_dict["image_url"] = {"url": f"data:{item.mime_type};base64,{item.data}"}
+            elif item.id:
+                # Use id as a reference (some providers may support this)
+                content_dict["image_url"] = {"url": item.id}
+
+            langchain_content.append(content_dict)
+
+    return langchain_content
+
+
+# Stolen from ag-ui-langgraph
+def agui_messages_to_langchain(messages: list[AGUIMessage]) -> list[BaseMessage]:
+    langchain_messages = []
+    for message in messages:
+        role = message.role
+        if role == "user":
+            # Handle multimodal content
+            if isinstance(message.content, str):
+                content = message.content
+            elif isinstance(message.content, list):
+                content = convert_agui_multimodal_to_langchain(message.content)
+            else:
+                content = str(message.content)
+
+            langchain_messages.append(HumanMessage(
+                id=message.id,
+                content=content,
+                name=message.name,
+            ))
+        elif role == "assistant":
+            tool_calls = []
+            if hasattr(message, "tool_calls") and message.tool_calls:
+                for tc in message.tool_calls:
+                    tool_calls.append({
+                        "id": tc.id,
+                        "name": tc.function.name,
+                        "args": json.loads(tc.function.arguments) if hasattr(tc, "function") and tc.function.arguments else {},
+                        "type": "tool_call",
+                    })
+            langchain_messages.append(AIMessage(
+                id=message.id,
+                content=message.content or "",
+                tool_calls=tool_calls,
+                name=message.name,
+            ))
+        elif role == "system":
+            langchain_messages.append(SystemMessage(
+                id=message.id,
+                content=message.content,
+                name=message.name,
+            ))
+        elif role == "tool":
+            langchain_messages.append(ToolMessage(
+                id=message.id,
+                content=message.content,
+                tool_call_id=message.tool_call_id,
+            ))
+        else:
+            raise ValueError(f"Unsupported message role: {role}")
+    return langchain_messages
+
+
 class AgentEventProjector:
     def __init__(self, agent: CompiledStateGraph, config: Optional[ProjectionConfig | dict] = None) -> None:
-        """Initialize the projector with an agent and redaction config."""
+        """Initialise the projector with an agent and redaction config."""
         self._agent = agent
         self._config = self._normalize_config(config)
 
@@ -153,11 +247,11 @@ class AgentEventProjector:
         return None
 
     @staticmethod
-    def _is_tool_message(message: Any) -> bool:
+    def _is_tool_message(message: BaseMessage) -> bool:
         """Return True when the message is a ToolMessage-like object."""
         return hasattr(message, "tool_call_id") and hasattr(message, "name")
 
-    def _project_tool_message(self, message: Any) -> Optional[ToolCallResultEvent]:
+    def _project_tool_message(self, message: BaseMessage) -> Optional[ToolCallResultEvent]:
         """Convert a ToolMessage into a ToolCallResultEvent if possible."""
         tool_name = getattr(message, "name", None)
         tool_call_id = getattr(message, "tool_call_id", None)
@@ -178,7 +272,7 @@ class AgentEventProjector:
 
     def _project_ai_message(
         self,
-        message: Any,
+        message: BaseMessage,
         text_started: set[str],
         tool_started: set[str],
         tool_args_emitted: set[str],
@@ -194,8 +288,16 @@ class AgentEventProjector:
                 events.append(TextMessageStartEvent(message_id=message_id))
             events.append(TextMessageContentEvent(message_id=message_id, delta=delta))
 
-        if message_id and getattr(message, "chunk_position", None) == "last":
-            if message_id in text_started:
+        # Emit end-of-text for chunked streams (AIMessageChunk) AND full messages (AIMessage).
+        if message_id:
+            is_chunk = isinstance(message, AIMessageChunk)
+            is_full = isinstance(message, AIMessage)
+
+            should_end = (
+                (is_chunk and getattr(message, "chunk_position", None) == "last")
+                or (is_full and not is_chunk)
+            )
+            if should_end and message_id in text_started:
                 events.append(TextMessageEndEvent(message_id=message_id))
 
         tool_call_chunks = getattr(message, "tool_call_chunks", None) or []
@@ -243,7 +345,7 @@ class AgentEventProjector:
         return events
 
     @staticmethod
-    def _extract_text_delta(message: Any) -> str:
+    def _extract_text_delta(message: BaseMessage) -> str:
         """Extract text delta from model message content."""
         content = getattr(message, "content", "")
         if isinstance(content, str):

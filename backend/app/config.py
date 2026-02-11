@@ -91,10 +91,3 @@ class AgentContext(BaseModel):
 
     # What tools need
     neo4j_driver: 'Driver'
-
-    def to_langgraph_config(self) -> dict:
-        """Converts to a LangGraph runtime config dictionary.
-
-        This is a slightly hacky way to pass the Neo4j driver to the runtime.
-        """
-        return {'__pregel_runtime': Runtime(context=self)}
