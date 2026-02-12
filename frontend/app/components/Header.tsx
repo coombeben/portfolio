@@ -11,7 +11,7 @@ export function Header () {
     </div>
     <a
       className="appHeader__link"
-      href="https://github.com/your-name/your-repo"
+      href="https://github.com/coombeben/portfolio"
       target="_blank"
       rel="noreferrer"
     >

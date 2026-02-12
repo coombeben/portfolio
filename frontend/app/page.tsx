@@ -1,12 +1,13 @@
 "use client";
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   CopilotChat,
   CopilotKitCSSProperties,
 } from "@copilotkit/react-ui";
+
 import { useRenderToolCall } from "@copilotkit/react-core";
 import { Header } from "@/components/Header";
-import {CustomInput} from "@/components/input";
+import {CustomInput} from "@/components/Input";
 import {ToolCallStatus} from "@/components/ToolCallStatus";
 import AudienceModal, { AudienceMode } from "@/components/AudienceModal";
 import { QuotaProvider, useQuota } from "@/context/QuotaContext";
@@ -33,8 +34,12 @@ function ChatInterface({ initialMessage, modalOpen }: { initialMessage: string, 
       <CopilotChat
         // Messages={CustomMessages}
         Input={CustomInput}
-        onSubmitMessage={() => {
-          refreshQuota();
+        onInProgress={async (inProgress) => {
+          if (inProgress) {
+            // Add a small delay before refreshing the quota to ensure the latest usage is reflected
+            await new Promise(r => setTimeout(r, 500));
+            await refreshQuota();
+          }
         }}
         labels={{
           title: "Portfolio Assistant",

@@ -11,8 +11,8 @@ interface QuotaContextType {
 const QuotaContext = createContext<QuotaContextType | undefined>(undefined);
 
 export function QuotaProvider({ children }: { children: React.ReactNode }) {
-  const [used, setUsed] = useState(0);
-  const [total, setTotal] = useState(0);
+  const [used, setUsed] = useState(NaN);
+  const [total, setTotal] = useState(NaN);
 
   const refreshQuota = useCallback(async () => {
     try {

@@ -8,9 +8,12 @@ export default function RootLayout({ children }: {children: React.ReactNode}) {
     <html lang="en">
       <body>
         <CopilotKit
-            runtimeUrl="/api/copilotkit"
-            agent="sample_agent"
-            enableInspector={false}
+          runtimeUrl="/api/copilotkit"
+          agent="sample_agent"
+          // enableInspector={false}
+          headers={{
+            "Authorization": "Bearer my-secret-api"
+          }}
         >
           {children}
         </CopilotKit>
