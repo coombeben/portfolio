@@ -11,6 +11,8 @@ import {CustomInput} from "@/components/Input";
 import {ToolCallStatus} from "@/components/ToolCallStatus";
 import AudienceModal, { AudienceMode } from "@/components/AudienceModal";
 import { QuotaProvider, useQuota } from "@/context/QuotaContext";
+import LoginScreen from "@/components/LoginScreen";
+import { useAuth } from "@/context/AuthContext";
 
 const AUDIENCE_STORAGE_KEY = "portfolio-audience-mode";
 
@@ -53,6 +55,7 @@ function ChatInterface({ initialMessage, modalOpen }: { initialMessage: string, 
 
 
 export default function Page() {
+  const { status, isAuthenticated } = useAuth();
   const [audienceMode, setAudienceMode] = useState<AudienceMode | null>(null);
   const [hasHydrated, setHasHydrated] = useState(false);
 
@@ -88,22 +91,45 @@ export default function Page() {
 
   const modalOpen = hasHydrated && audienceMode === null;
 
+  if (status === "checking") {
+    return (
+      <main className="portfolioApp">
+        <Header />
+        <div className="authScreen">
+          <div className="authCard">
+            <div className="authTitle">Checking session...</div>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <main className="portfolioApp">
+        <Header />
+        <LoginScreen />
+      </main>
+    );
+  }
+
   return (
     <QuotaProvider>
       <main
         className="portfolioApp"
         data-modal-open={modalOpen ? "true" : "false"}
-        style={
+        style=
           {
-            "--copilot-kit-primary-color": "#ef7b20",
-            "--copilot-kit-contrast-color": "#ffffff",
-            "--copilot-kit-background-color": "#fef8ee",
-            "--copilot-kit-secondary-color": "#fdeed7",
-            "--copilot-kit-secondary-contrast-color": "#40180a",
-            "--copilot-kit-separator-color": "#fad9ae",
-            "--copilot-kit-muted-color": "#f7be7a",
-          } as CopilotKitCSSProperties
-        }
+            {
+              "--copilot-kit-primary-color": "#ef7b20",
+              "--copilot-kit-contrast-color": "#ffffff",
+              "--copilot-kit-background-color": "#fef8ee",
+              "--copilot-kit-secondary-color": "#fdeed7",
+              "--copilot-kit-secondary-contrast-color": "#40180a",
+              "--copilot-kit-separator-color": "#fad9ae",
+              "--copilot-kit-muted-color": "#f7be7a",
+            } as CopilotKitCSSProperties
+          }
       >
         <Header/>
         <ChatInterface initialMessage={initialMessage} modalOpen={modalOpen} />

@@ -8,25 +8,36 @@ import { NextRequest } from "next/server";
 
 const serviceAdapter = new ExperimentalEmptyAdapter();
 
-const agent = new HttpAgent({
-  url: process.env.LANGGRAPH_DEPLOYMENT_URL || "http://localhost:8000/chat/stream",
-  // headers: {
-    // Authorization: `Bearer ${process.env.LANGGRAPH_DEPLOYMENT_API_KEY}`,
-  // }
-});
-
-const runtime = new CopilotRuntime({
-  agents: {
-    // @ts-expect-error - The types for the agent are not fully defined, but it should still work at runtime.
-    sample_agent: agent
-  }
-});
-
 export const POST = async (req: NextRequest) => {
+
+  const agent = new HttpAgent({
+    url: process.env.LANGGRAPH_DEPLOYMENT_URL || "http://localhost:8000/chat/stream",
+  });
+
+  // Annoyingly, we need to explicitly forward the cookies with each request
+  const cookieHeader = req.headers.get("cookie");
+  if (cookieHeader) {
+    agent.headers = {
+      ...agent.headers,
+      cookie: cookieHeader,
+    };
+  }
+
+  const runtime = new CopilotRuntime({
+    agents: {
+      // @ts-expect-error - The types for the agent are not fully defined, but it should still work at runtime.
+      sample_agent: agent
+    }
+  });
+
   const { handleRequest } = copilotRuntimeNextJSAppRouterEndpoint({
     runtime,
     serviceAdapter,
     endpoint: "/api/copilotkit",
+    cors: {
+      origin: "http://localhost:3000,http://localhost:8000",
+      credentials: true,
+  }
   });
 
   return handleRequest(req);

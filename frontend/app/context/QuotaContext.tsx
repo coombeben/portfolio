@@ -1,6 +1,7 @@
 "use client";
 
 import React, {createContext, useContext, useState, useCallback, useEffect} from "react";
+import { apiFetch, UnauthorizedError } from "@/api/client";
 
 interface QuotaContextType {
   used: number;
@@ -16,11 +17,14 @@ export function QuotaProvider({ children }: { children: React.ReactNode }) {
 
   const refreshQuota = useCallback(async () => {
     try {
-      const response = await fetch("/api/quota");
+      const response = await apiFetch("/api/quota");
       const data = await response.json();
       setUsed(data.limit - data.remaining);
       setTotal(data.limit);
     } catch (error) {
+      if (error instanceof UnauthorizedError) {
+        return;
+      }
       console.error("Failed to fetch quota:", error);
     }
   }, []);

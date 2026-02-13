@@ -389,6 +389,99 @@ body.modal-open {
   font-weight: 400;
 }
 
+.authScreen {
+  position: fixed;
+  inset: var(--header-height) 0 0;
+  display: grid;
+  place-items: center;
+  padding: 32px 20px;
+  background: rgba(255, 247, 239, 0.94);
+}
+
+.authCard {
+  width: min(420px, 100%);
+  background: var(--surface-strong);
+  border-radius: 24px;
+  padding: 28px;
+  box-shadow: var(--shadow-soft);
+  border: 1px solid var(--line-soft);
+  display: grid;
+  gap: 20px;
+}
+
+.authHeader {
+  display: grid;
+  gap: 6px;
+}
+
+.authTitle {
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.authSubtitle {
+  color: var(--ink-500);
+  font-size: 14px;
+}
+
+.authForm {
+  display: grid;
+  gap: 14px;
+}
+
+.authLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-700);
+}
+
+.authInput {
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid var(--line-soft);
+  padding: 0 14px;
+  font-size: 14px;
+  outline: none;
+  background: #ffffff;
+}
+
+.authInput:focus {
+  border-color: var(--primary-400);
+  box-shadow: 0 0 0 3px rgba(239, 123, 32, 0.15);
+}
+
+.authButton {
+  height: 44px;
+  border-radius: 999px;
+  border: none;
+  background: var(--primary-600);
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.authButton:disabled {
+  opacity: 0.7;
+  cursor: progress;
+  transform: none;
+  box-shadow: none;
+}
+
+.authButton:not(:disabled):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(239, 123, 32, 0.22);
+}
+
+.authError {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(186, 73, 20, 0.08);
+  color: var(--primary-700);
+  font-size: 13px;
+}
+
 @keyframes toolCallSpin {
   to {
     transform: rotate(360deg);
