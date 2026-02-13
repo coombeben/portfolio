@@ -57,8 +57,7 @@ async def enforce_daily_quota(
 
     result = await conn.execute(query, (session_id,))
     count, = await result.fetchone()
-    daily_limit = settings.daily_limit
-    if count >= daily_limit:
+    if count > settings.daily_limit:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Daily limit exceeded"
