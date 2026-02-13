@@ -1,3 +1,6 @@
+import hashlib
+import logging
+import secrets
 import uuid
 import warnings
 
@@ -7,20 +10,24 @@ load_dotenv()
 
 from pydantic import BaseModel
 from pydantic.warnings import UnsupportedFieldAttributeWarning
-from fastapi import FastAPI, Request, Depends
+from fastapi import FastAPI, Request, Depends, HTTPException, status, Response
 from fastapi.responses import StreamingResponse
 from ag_ui.core import RunAgentInput
 from ag_ui.encoder import EventEncoder
+from psycopg import AsyncConnection, sql
+from psycopg.errors import OperationalError
 from neo4j import AsyncDriver
+from neo4j.exceptions import DriverError
 
-from app.mock_agent import graph, State
-from app.config import get_config, AgentContext
-from app.dependencies import get_client_identifier, get_pg_conn, get_neo4j_driver
+from app.mock_agent import State
+from app.config import AgentContext, settings
+from app.dependencies import get_pg_conn, get_neo4j_driver, user_identifier, requires_auth, enforce_daily_quota
 from app.lifespan import lifespan
-from app.projector import AgentEventProjector, StreamInputs, agui_messages_to_langchain
+from app.projector import StreamInputs, agui_messages_to_langchain
+from app.sessions import create_session
 
-config = get_config('production')
 warnings.simplefilter("ignore", category=UnsupportedFieldAttributeWarning)
+logger = logging.getLogger(__name__)
 
 
 class Quota(BaseModel):
@@ -28,16 +35,28 @@ class Quota(BaseModel):
     limit: int
 
 
+class Login(BaseModel):
+    password: str
+
+
 app = FastAPI(lifespan=lifespan)
 
 
 @app.post('/chat/stream')
-async def langgraph_agent_endpoint(input_data: RunAgentInput, request: Request, neo4j_driver: AsyncDriver = Depends(get_neo4j_driver)):
+async def langgraph_agent_endpoint(
+        input_data: RunAgentInput,
+        request: Request,
+        neo4j_driver: AsyncDriver = Depends(get_neo4j_driver),
+        _ = Depends(enforce_daily_quota)
+):
+    print(f"Chat sees cookie {request.cookies.get('session')}")
+    # raise HTTPException(status_code=400, detail="Not implemented yet")
+
     accept_header = request.headers.get("accept")
     encoder = EventEncoder(accept=accept_header)
 
     state = State(
-        messages=agui_messages_to_langchain(input_data.messages),
+        messages=agui_messages_to_langchain(input_data.messages)[-1:],
     )
     stream_inputs = StreamInputs(
         state=state,
@@ -45,9 +64,9 @@ async def langgraph_agent_endpoint(input_data: RunAgentInput, request: Request, 
         thread_id=str(input_data.thread_id)
     )
     context = AgentContext(
-        moderator_llm=config.moderator_llm,
-        chat_llm=config.chat_llm,
-        enable_moderation=config.enable_moderation,
+        moderator_llm=settings.moderator_llm,
+        chat_llm=settings.chat_llm,
+        enable_moderation=settings.enable_moderation,
         neo4j_driver=neo4j_driver,
     )
 
@@ -62,20 +81,23 @@ async def langgraph_agent_endpoint(input_data: RunAgentInput, request: Request, 
 
 
 @app.get("/chat/quota")
-async def quota(identifier: str = Depends(get_client_identifier), pg_conn=Depends(get_pg_conn)) -> Quota:
+async def quota(
+    session_id: str = Depends(requires_auth),
+    pg_conn: AsyncConnection = Depends(get_pg_conn)
+) -> Quota:
     """Returns the user's remaining usage on the /chat/stream endpoint."""
     # As we (1) don't handle any untrusted user data and (2) Only use the DB for rate limiting,
     # an ORM would be overkill, so we just use good old-fashioned SQL queries here.
-    query = """
-    SELECT request_count
+    query = sql.SQL("""
+    SELECT message_count
     FROM endpoint_usage
-    WHERE identifier = %s
-    AND usage_date = CURRENT_DATE
-    """
-    result = await pg_conn.execute(query, (identifier,))
+    WHERE session_id = %s
+      AND usage_date = CURRENT_DATE
+    """)
+    result = await pg_conn.execute(query, (session_id,))
     count = await result.fetchone()
     used = count[0] if count else 0
-    daily_limit = app.state.config.daily_limit
+    daily_limit = settings.daily_limit
 
     return Quota(
         remaining=max(0, daily_limit - used),
@@ -83,7 +105,59 @@ async def quota(identifier: str = Depends(get_client_identifier), pg_conn=Depend
     )
 
 
-@app.get("/health")
-def health():
+@app.post("/auth/login")
+async def login(
+    login: Login,
+    response: Response,
+    conn: AsyncConnection = Depends(get_pg_conn),
+    identifier: str = Depends(user_identifier),
+):
+    if not secrets.compare_digest('password'.encode('utf-8'), login.password.encode('utf-8')):
+        raise HTTPException(status_code=401, detail="Incorrect password")
+
+    session_id = await create_session(conn, identifier)
+
+    response.set_cookie(
+        'session',
+        value=session_id,
+        httponly=True,
+        secure=True,
+        samesite='lax',
+        max_age=60 * 60 * 24 * 7
+    )
+    return {"message": "Login successful"}
+
+
+@app.post("/auth/logout")
+async def logout(response: Response):
+    response.delete_cookie('session')
+    return {"message": "Logout successful"}
+
+
+@app.get("/auth/session")
+async def session(_ = Depends(requires_auth)):
+    """Determines if a session is valid.
+
+    Returns 200 if the session cookie is present and valid.
+    Else, 401
+    """
+    return {"message": "Session is valid"}
+
+
+@app.get("/health", include_in_schema=False)
+async def health(
+    pg_conn: AsyncConnection = Depends(get_pg_conn),
+    neo4j_driver: AsyncDriver = Depends(get_neo4j_driver)
+):
     """Health check."""
+    try:
+        await pg_conn.execute("SELECT 1")
+        await neo4j_driver.verify_connectivity()
+    except (OperationalError, DriverError) as e:
+        logger.error(e)
+        return Response(
+            {"status": "error"},
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE
+        )
+
     return {"status": "ok"}

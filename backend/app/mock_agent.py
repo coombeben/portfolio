@@ -1,3 +1,4 @@
+import asyncio
 import time
 import uuid
 from typing import Annotated
@@ -17,6 +18,7 @@ class State(BaseModel):
     messages: Annotated[list[AnyMessage], add_messages]
 
 
+# noinspection PyIncorrectDocstring
 @tool(parse_docstring=True)
 async def execute_cypher(cypher: str, explanation: str, runtime: ToolRuntime[AgentContext]) -> str:
     """Execute a Cypher query against the Neo4j database.
@@ -26,13 +28,14 @@ async def execute_cypher(cypher: str, explanation: str, runtime: ToolRuntime[Age
         explanation (str): A short, user-facing explainer (a few words) that tells them what you're doing right now.
     """
     # Use the shared, pooled driver
-    driver = runtime.context.neo4j_driver
-    results = await driver.execute_query(cypher)
-    time.sleep(2)
-    return '\n'.join((str(record) for record in results.records))
+    async with runtime.context.neo4j_driver.session() as session:
+        results = await session.run(cypher)
+        records = await results.data()
+        await asyncio.sleep(2)
+        return '\n'.join((str(record) for record in records))
 
 
-def chatbot(state: State, runtime: Runtime[AgentContext]) -> dict:
+def chatbot(state: State) -> dict:
     """Creates cypher queries and responds to the user message."""
     tool_msg_exists = any(isinstance(msg, ToolMessage) for msg in state.messages)
     if tool_msg_exists:

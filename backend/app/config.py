@@ -9,7 +9,7 @@ from neo4j import AsyncDriver
 from app.projector import ProjectionConfig
 
 
-__all__ = ['Config', 'get_config', 'AgentContext']
+__all__ = ['Config', 'settings', 'AgentContext']
 
 
 class LLMConfig(BaseModel):
@@ -35,6 +35,9 @@ class Config(BaseSettings):
     enable_moderation: bool = True
 
     # Rate limiting
+    # Max sessions per IP
+    max_sessions: int = 3
+    # Max messages per session
     daily_limit: int = 10
 
     # LLM options
@@ -77,6 +80,9 @@ def get_config(config_type: ConfigType = 'production') -> Config:
         return DevelopmentConfig()
 
     return ProductionConfig()
+
+
+settings = get_config('production')
 
 
 class AgentContext(BaseModel):

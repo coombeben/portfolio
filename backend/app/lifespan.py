@@ -14,26 +14,25 @@ from psycopg_pool import AsyncConnectionPool
 from neo4j import AsyncGraphDatabase
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
-from app.config import get_config
+from app.config import settings
 from app.mock_agent import graph
+from app.projector import AgentEventProjector
 
 __all__ = ['lifespan']
-
-config = get_config('production')
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Neo4j driver
     neo4j_driver = AsyncGraphDatabase.driver(
-        config.neo4j_uri,
-        auth=(config.neo4j_user, config.neo4j_password),
+        settings.neo4j_uri,
+        auth=(settings.neo4j_user, settings.neo4j_password),
     )
 
     # Postgres pool
     dsn = (
-        f"postgresql://{config.postgres_user}:{config.postgres_password}"
-        f"@{config.postgres_uri}/{config.postgres_db}"
+        f"postgresql://{settings.postgres_user}:{settings.postgres_password}"
+        f"@{settings.postgres_uri}/{settings.postgres_db}"
     )
     pg_pool = AsyncConnectionPool(dsn, open=False)
     await pg_pool.open(wait=True)
@@ -46,9 +45,12 @@ async def lifespan(app: FastAPI):
         await checkpointer.setup()
 
         agent = graph.compile(checkpointer=checkpointer)
+        projector = AgentEventProjector(
+            agent,
+            settings.projection_config
+        )
 
-        app.state.config = config
-        app.state.agent = agent
+        app.state.projector = projector
         app.state.pg_pool = pg_pool
         app.state.neo4j_driver = neo4j_driver
 
