@@ -96,9 +96,7 @@ export default function Page() {
       <main className="portfolioApp">
         <Header />
         <div className="authScreen">
-          <div className="authCard">
-            <div className="authTitle">Checking session...</div>
-          </div>
+          <div className="authStatus">Checking session...</div>
         </div>
       </main>
     );

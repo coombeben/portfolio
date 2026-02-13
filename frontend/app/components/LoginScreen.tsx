@@ -35,7 +35,7 @@ export default function LoginScreen() {
     <div className="authScreen" role="dialog" aria-modal="true" aria-label="Login">
       <div className="authCard">
         <div className="authHeader">
-          <div className="authTitle">Welcome back</div>
+          <div className="authTitle">Sign in</div>
           <div className="authSubtitle">Enter the password to continue.</div>
         </div>
         <form className="authForm" onSubmit={handleSubmit}>
@@ -64,4 +64,3 @@ export default function LoginScreen() {
     </div>
   );
 }
-

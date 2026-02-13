@@ -5,7 +5,7 @@ export function DailyLimitIndicator() {
   const { used, total } = useQuota();
 
   const diff = total - used;
-  const remaining = (isNaN(diff) || diff <= 0) ? "?" : Math.ceil(diff);
+  const remaining = (isNaN(diff) || diff < 0) ? "?" : Math.ceil(diff);
 
   return (
     <div className="dailyLimitIndicator">

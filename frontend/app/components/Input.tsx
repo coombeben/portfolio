@@ -2,9 +2,15 @@ import { type InputProps} from "@copilotkit/react-ui";
 import "@copilotkit/react-ui/styles.css";
 import { DailyLimitIndicator } from "./DailyLimitIndicator";
 import { useRef, useEffect } from "react";
+import { useQuota } from "@/context/QuotaContext";
 
 export function CustomInput({ inProgress, onSend, onStop }: InputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const { used, total } = useQuota();
+  const diff = total - used;
+  const remaining = Number.isNaN(diff) ? NaN : Math.ceil(diff);
+  const isQuotaExhausted = remaining === 0;
+  const isDisabled = inProgress || isQuotaExhausted;
 
   const autoResize = (textarea: HTMLTextAreaElement) => {
     textarea.style.height = 'auto';
@@ -18,6 +24,9 @@ export function CustomInput({ inProgress, onSend, onStop }: InputProps) {
   }, []);
 
   const handleSubmit = (value: string) => {
+    if (isDisabled) {
+      return;
+    }
     if (value.trim()) {
       onSend(value);
       if (textareaRef.current) {
@@ -26,16 +35,22 @@ export function CustomInput({ inProgress, onSend, onStop }: InputProps) {
     }
   };
 
+  const placeholder = isQuotaExhausted ? "Daily limit reached" : "Ask me anything...";
+
   return (
     <div className="inputArea">
       <DailyLimitIndicator/>
-      <div className="copilotKitInput">
+      <div className={`copilotKitInput${isDisabled ? " copilotKitInput--disabled" : ""}`}>
         <textarea
           ref={textareaRef}
-          disabled={inProgress}
-          placeholder="Ask me anything..."
+          disabled={isDisabled}
+          placeholder={placeholder}
           onInput={(e) => autoResize(e.currentTarget)}
           onKeyDown={(e) => {
+            if (isDisabled) {
+              e.preventDefault();
+              return;
+            }
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
               handleSubmit(e.currentTarget.value);
@@ -49,8 +64,11 @@ export function CustomInput({ inProgress, onSend, onStop }: InputProps) {
           <button
             className="copilotKitInputControlButton"
             aria-label="Send"
-            disabled={inProgress}
+            disabled={isDisabled}
             onClick={(e) => {
+              if (isDisabled) {
+                return;
+              }
               const textarea = e.currentTarget.parentElement?.previousElementSibling as HTMLTextAreaElement;
               if (textarea) {
                 handleSubmit(textarea.value);
