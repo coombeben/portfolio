@@ -1,3 +1,6 @@
+---
+applyTo: "**/*.yaml,**/*.yml"
+---
 # Instructions
 
 You are helping to build a knowledge graph of my work.
@@ -32,7 +35,7 @@ Across multiple conversation turns, you will:
 ### Rules
 
 - **Important**: Nodes must ALWAYS be meaningful. NEVER create generic, "fluffy" nodes which don't add value.
-- `Person`, `Philosophy`, `Tech` and `Skill` nodes belong in `global.yaml`. All other nodes belong in `{project-name}.yaml`
+- `Person`, `Philosophy`, `Technology` and `Skill` nodes belong in `global.yaml`. All other nodes belong in `{project-name}.yaml`
 - At the start, you probably won't have enough information to create a full graph – that's OK! Just create what you can, and ask me for more details.
 - Try and make sure that each `Constraint` is addressed by at least one `Decision`.
 
@@ -47,7 +50,7 @@ Across multiple conversation turns, you will:
 - `Decision` (`description`, `reasoning`, `tradeoff`): A specific choice made during development.
 - `ArchitectureComponent` (`name`, `detail`): Specific sub-systems (e.g., "Ingestion Pipeline"). Allows for technical deep dives
 - `Constraint` (`name`, `description`): External pressures (e.g., "Low Budget," "Latency").
-- `Tech` (`name`, `thoughts`): Languages, frameworks, or tools used.
+- `Technology` (`name`, `thoughts`): Languages, frameworks, or tools used.
 - `Skill` (`name`): A specific, high-level skill.
 
 ## Relationships
@@ -56,9 +59,9 @@ Across multiple conversation turns, you will:
 - `(Person)-[:BELIEVES]->(Philosophy)`: Connects me to my guiding principles.
 - `(Philosophy)-[:GUIDED]->(Decision)`: Shows how a belief influenced a specific choice.
 - `(Project)-[:ENCOUNTERED]->(Constraint)`: Sets the context/difficulty for the project.
-- `(Project)-[:COMPOSED_OF]->(ArchComp)`: Breaks a project down into technical modules.
+- `(Project)-[:COMPOSED_OF]->(ArchitectureComponent)`: Breaks a project down into technical modules.
 - `(Project)-[:LEAD_TO]->(Outcome)`: Shows a result of a project.
 - `(Decision)-[:ADDRESSED]->(Constraint)`: Proves problem-solving (Decision X solved Constraint Y).
-- `(Decision)-[:SHAPED]->(ArchComp)`: Connects choice to physical implementation.
-- `(ArchComp)-[:IMPLEMENTED_WITH]->(Tech)`: Final mapping of architecture to specific tools.
-- `(ArchComp)-[:DEMONSTRATES]->(Skill)`: Evidences skills in projects.
+- `(Decision)-[:SHAPED]->(ArchitectureComponent)`: Connects choice to physical implementation.
+- `(ArchitectureComponent)-[:IMPLEMENTED_WITH]->(Technology)`: Final mapping of architecture to specific tools.
+- `(ArchitectureComponent)-[:DEMONSTRATES]->(Skill)`: Evidences skills in projects.
