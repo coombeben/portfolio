@@ -3,6 +3,7 @@ NB: Doing this with `neomodel` would be unbelievably inefficient as it has limit
 for dynamic queries (akin to sqlalchemy). Instead, we use raw Cypher queries and map the results
  to these Pydantic models.
 """
+from functools import total_ordering
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -101,15 +102,34 @@ class ProjectDetail(BaseModel):
     strategic: Strategic | None = None
 
 
+@total_ordering
 class Evidence(BaseModel):
     node_type: Node
-    node_id: str
-    metadata: dict
+    focus: Literal['RESULTS', 'TECHNICAL', 'STRATEGIC'] | None
     relevance_score: float
 
+    def __lt__(self, other):
+        return self.relevance_score < other.relevance_score
 
+    def __eq__(self, other):
+        return self.relevance_score == other.relevance_score
+
+
+@total_ordering
 class ProjectMatch(BaseModel):
     """Output model of the search tool"""
     project_id: str
     project_name: str
     evidence: list[Evidence] = Field(default_factory=list)
+
+    @property
+    def relevance_score(self) -> float:
+        if not self.evidence:
+            return 0.
+        return sum(evidence.relevance_score for evidence in self.evidence)
+
+    def __lt__(self, other):
+        return self.relevance_score < other.relevance_score
+
+    def __eq__(self, other):
+        return self.relevance_score == other.relevance_score

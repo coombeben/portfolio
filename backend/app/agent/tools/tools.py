@@ -7,7 +7,7 @@ from langchain.tools import tool
 from langgraph.prebuilt import ToolRuntime
 
 from ..models import AgentContext
-from .models import Node, ProjectMatch, ProjectDetail
+from .models import Node, ProjectMatch, Evidence, ProjectDetail
 
 __all__ = ['search_knowledge_base', 'get_project_detail']
 
@@ -28,6 +28,23 @@ def execute_cypher(cypher: str, explanation: str, runtime: ToolRuntime[AgentCont
     driver = runtime.context.neo4j_driver
     results = driver.execute_query(cypher)
     return '\n'.join((str(record) for record in results.records))
+
+
+def _labels_to_focus(labels: list[str]) -> Focus | None:
+    """Convert a list of labels to a focus area."""
+    for label in labels:
+        # Ignore meta label
+        if label == 'Searchable':
+            continue
+
+        if label in ('Technology', 'Skill', 'ArchitectureComponent'):
+            return 'TECHNICAL'
+        if label in ('Decision', 'Constraint', 'Philosophy'):
+            return 'STRATEGIC'
+        if label == 'Outcome':
+            return 'RESULTS'
+
+    return None
 
 
 def _build_project_query(focuses: Iterable[Focus]) -> str:
@@ -183,10 +200,10 @@ def _build_project_query(focuses: Iterable[Focus]) -> str:
 
 # noinspection PyIncorrectDocstring
 @tool
-def search_knowledge_base(
-        query: str,
-        runtime: ToolRuntime[AgentContext],
-        search_scope: list[Node] | None = None
+async def search_knowledge_base(
+    query: str,
+    runtime: ToolRuntime[AgentContext],
+    search_scope: list[Node] | None = None
 ) -> list[ProjectMatch]:
     """Perform hybrid semantic and keyword search across the knowledge graph to identify
     projects relevant to a natural language query.
@@ -202,7 +219,95 @@ def search_knowledge_base(
     Returns:
           The top 5 most relevant projects.
     """
-    pass
+    MAX_NODES = 30
+    CANDIDATE_POOL = 60
+    MAX_PROJECTS = 5
+    MAX_EVIDENCE = 3
+
+    cypher = """
+    // Generate the embedding
+    WITH ai.text.embed($query_, "openai", { token: '-', model: 'text-embeddings-inference' }) AS vector
+    WITH toFloatList(vector) AS queryVector, 
+         $query_ as query
+    
+    // Execute searches within a unified subquery
+    CALL (queryVector, query) {
+        // Branch A: Vector Search
+        WITH queryVector
+        MATCH (n)
+        SEARCH n IN (
+            VECTOR INDEX embeddingIndex
+            FOR queryVector
+            LIMIT $max_nodes
+        ) SCORE AS vectorScore
+        ORDER BY vectorScore DESC
+        
+        // Create the rank index (1-based)
+        WITH collect(n) AS vNodes
+        UNWIND range(0, size(vNodes)-1) AS vIdx
+        RETURN vNodes[vIdx] AS n, (vIdx + 1) AS vRank, 0 AS fRank
+    
+        UNION ALL
+    
+        // Branch B: Fulltext Search
+        WITH query
+        CALL db.index.fulltext.queryNodes("contentIndex", query)
+        YIELD node AS n, score AS fulltextScore
+        ORDER BY fulltextScore DESC
+        LIMIT $max_nodes
+        
+        // Create the rank index (1-based)
+        WITH collect(n) AS fNodes
+        UNWIND range(0, size(fNodes)-1) AS fIdx
+        RETURN fNodes[fIdx] AS n, 0 AS vRank, (fIdx + 1) AS fRank
+    }
+    
+    // Aggregate results and calculate RRF score
+    // Use max() to combine ranks if the node appeared in both searches
+    WITH n, max(vRank) AS vectorRank, max(fRank) AS fulltextRank
+    WITH n, vectorRank, fulltextRank,
+         (CASE WHEN vectorRank > 0 THEN 1.0 / (60 + vectorRank) ELSE 0.0 END) +
+         (CASE WHEN fulltextRank > 0 THEN 1.0 / (60 + fulltextRank) ELSE 0.0 END) AS rrfScore
+    
+    // Final Join and Return
+    MATCH (n)-[:BELONGS_TO_PROJECT]->(p:Project)
+    RETURN
+        n.uid AS node_id,
+        labels(n) AS labels,
+        rrfScore,
+        vectorRank,
+        fulltextRank,
+        p.uid AS project_id,
+        p.name AS project_name
+    ORDER BY rrfScore DESC
+    LIMIT $max_nodes
+    """
+
+    async with runtime.context.neo4j_driver.session() as session:
+        result = await session.run(cypher, query_=query, candidate_pool=CANDIDATE_POOL, max_nodes=MAX_NODES)
+        records = await result.values()
+
+    # Post-process to aggregate evidence by project
+    project_map: dict[str, ProjectMatch] = {}
+    for node_uid, labels, score, project_id, project_name in records:
+        evidence = Evidence(
+            node_type=labels[0],
+            focus=_labels_to_focus(labels),
+            relevance_score=score
+        )
+        if project_id not in project_map:
+            project_map[project_id] = ProjectMatch(
+                project_id=project_id,
+                project_name=project_name,
+                evidence=[evidence]
+            )
+        # Only append evidence if we don't have enough already to keep the evidence list concise and relevant
+        elif len(project_map[project_id].evidence) < MAX_EVIDENCE:
+            project_map[project_id].evidence.append(evidence)
+
+    # Return the top k projects sorted by relevance
+    relevant_projects = sorted(list(project_map.values()), reverse=True)
+    return relevant_projects[:MAX_PROJECTS]
 
 
 # noinspection PyIncorrectDocstring
