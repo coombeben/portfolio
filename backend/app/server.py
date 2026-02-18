@@ -1,4 +1,3 @@
-import hashlib
 import logging
 import secrets
 import uuid
@@ -19,8 +18,9 @@ from psycopg.errors import OperationalError
 from neo4j import AsyncDriver
 from neo4j.exceptions import DriverError
 
-from app.mock_agent import State
-from app.config import AgentContext, settings
+# from app.mock_agent import State
+from app.config import settings
+from app.agent import AgentContext, State
 from app.dependencies import get_pg_conn, get_neo4j_driver, user_identifier, requires_auth, enforce_daily_quota
 from app.lifespan import lifespan
 from app.projector import StreamInputs, agui_messages_to_langchain
@@ -48,13 +48,13 @@ async def langgraph_agent_endpoint(
         request: Request,
         neo4j_driver: AsyncDriver = Depends(get_neo4j_driver),
         _ = Depends(enforce_daily_quota)
-):
-    print(f"Chat sees cookie {request.cookies.get('session')}")
-    # raise HTTPException(status_code=400, detail="Not implemented yet")
-
+) -> StreamingResponse:
+    """Runs the agent and streams the events back to the client via AG-UI protocol"""
     accept_header = request.headers.get("accept")
     encoder = EventEncoder(accept=accept_header)
 
+    # The existing state will automatically be recovered from Postgres
+    # All we need is the latest message from the user.
     state = State(
         messages=agui_messages_to_langchain(input_data.messages)[-1:],
     )
@@ -112,8 +112,12 @@ async def login(
     conn: AsyncConnection = Depends(get_pg_conn),
     identifier: str = Depends(user_identifier),
 ):
+    """Logs in the user."""
     if not secrets.compare_digest('password'.encode('utf-8'), login.password.encode('utf-8')):
-        raise HTTPException(status_code=401, detail="Incorrect password")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect password"
+        )
 
     session_id = await create_session(conn, identifier)
 
@@ -130,6 +134,7 @@ async def login(
 
 @app.post("/auth/logout")
 async def logout(response: Response):
+    """Logs out the current user."""
     response.delete_cookie('session')
     return {"message": "Logout successful"}
 
@@ -149,15 +154,15 @@ async def health(
     pg_conn: AsyncConnection = Depends(get_pg_conn),
     neo4j_driver: AsyncDriver = Depends(get_neo4j_driver)
 ):
-    """Health check."""
+    """Health check. Confirms that Postgres and Neo4j are both available."""
     try:
         await pg_conn.execute("SELECT 1")
         await neo4j_driver.verify_connectivity()
     except (OperationalError, DriverError) as e:
         logger.error(e)
-        return Response(
-            {"status": "error"},
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"status": "error"},
         )
 
     return {"status": "ok"}

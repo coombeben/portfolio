@@ -32,13 +32,13 @@ async def requires_auth(request: Request, response: Response, conn: AsyncConnect
     """Marks a route as requiring authentication."""
     session_id = request.cookies.get('session')
     if session_id is None:
-        raise HTTPException(status_code=401, detail="Not logged in")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not logged in")
 
     result = await conn.execute("SELECT id FROM sessions WHERE id = %s", (session_id,))
     session = await result.fetchone()
     if session is None:
         response.delete_cookie('session')
-        raise HTTPException(status_code=401, detail="Not logged in")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not logged in")
 
     return session_id
 
@@ -47,6 +47,7 @@ async def enforce_daily_quota(
         session_id: str = Depends(requires_auth),
         conn: AsyncConnection = Depends(get_pg_conn)
 ) -> None:
+    """Enforces a daily limit on the number of messages sent to the endpoint."""
     query = sql.SQL("""
     INSERT INTO endpoint_usage (session_id, usage_date, message_count)
     VALUES (%s, CURRENT_DATE, 1)
