@@ -2,7 +2,7 @@ import os
 
 import yaml
 from dotenv import load_dotenv
-from neo4j import GraphDatabase
+from neo4j import GraphDatabase, Session
 from tqdm import tqdm
 from sentence_transformers import SentenceTransformer
 
@@ -19,6 +19,7 @@ NODE_TYPES = {
     'Constraint': {'name', 'description'},
     'Technology': {'name', 'thoughts'},
     'Skill': {'name'},
+    'Searchable': {'content', 'embedding'}  # Meta-label. Used for hybrid search.
 }
 RELATIONS = [
     ('Person', 'BUILT', 'Project'),
@@ -44,14 +45,14 @@ URI = "neo4j://localhost"
 AUTH = ('neo4j', os.getenv('NEO4J_PASSWORD'))
 GLOBALS = 'global.yaml'
 PROJECTS = ['trade-agent.yaml', 'funding-finder.yaml', 'virtual-analyst.yaml', 'this-project.yaml']
-EMBEDDING_MODEL = 'all-MiniLM-L6-v2'
+EMBEDDING_MODEL = os.environ['HF_EMBEDDING_MODEL']
 EMBEDDING_BATCH_SIZE = 32
 
 
 def load_data(filename: str) -> dict:
     """Loads data from a YAML file into a dictionary.
     Validates the data against the defined schema."""
-    with open(filename, 'r') as f:
+    with open(filename, 'r', encoding='utf-8') as f:
         projects = yaml.safe_load(f)
 
     # Validate
@@ -75,13 +76,15 @@ def load_data(filename: str) -> dict:
     return projects
 
 
-def clear_neo4j(session):
+def clear_neo4j(session: Session) -> None:
+    """Clears all nodes, relationships, and indexes from the database."""
     session.run("MATCH (n) DETACH DELETE n")
     session.run("DROP INDEX contentIndex IF EXISTS")
     session.run("DROP INDEX embeddingIndex IF EXISTS")
 
 
-def populate_neo4j(session, data: dict) -> tuple[int, int]:
+def populate_neo4j(session: Session, data: dict) -> tuple[int, int]:
+    """Creates the nodes and relationships from the data files."""
     # Create nodes
     for node in data['nodes']:
         node_id = node['uid']
@@ -118,13 +121,53 @@ def populate_neo4j(session, data: dict) -> tuple[int, int]:
     return len(data['nodes']), len(data['relationships'])
 
 
-def create_embeddings(session, model: SentenceTransformer, batch_size: int = EMBEDDING_BATCH_SIZE):
-    """Create embeddings for all Searchable nodes in batches without loading all into memory."""
+def create_project_relationships(session: Session, data: dict) -> int:
+    """Create BELONGS_TO_PROJECT relationships for all nodes in a project file."""
+    # Find the Project node in this file
+    project_uid = None
+    for node in data['nodes']:
+        if node['type'] == 'Project':
+            project_uid = node['uid']
+            break
+
+    if not project_uid:
+        return 0
+
+    # Collect all unique UIDs referenced in this file (from nodes and relationships)
+    referenced_uids = set()
+
+    # Add UIDs from nodes
+    for node in data['nodes']:
+        referenced_uids.add(node['uid'])
+
+    # Add UIDs from relationships
+    for relationship in data['relationships']:
+        referenced_uids.add(relationship['from'])
+        referenced_uids.add(relationship['to'])
+
+    # Remove the project UID itself
+    referenced_uids.discard(project_uid)
+
+    # Create BELONGS_TO_PROJECT relationships for all referenced UIDs
+    for uid in referenced_uids:
+        query = """
+        MATCH (n {uid: $node_uid})
+        MATCH (p:Project {uid: $project_uid})
+        CREATE (n)-[:BELONGS_TO_PROJECT]->(p)
+        """
+        session.run(query, {'node_uid': uid, 'project_uid': project_uid})
+
+    relationships_created = len(referenced_uids)
+    return relationships_created
+
+
+def create_embeddings(session: Session, model: SentenceTransformer, batch_size: int = EMBEDDING_BATCH_SIZE) -> None:
+    """Create embeddings for all Searchable nodes in batches."""
     # Get total count
     result = session.run("MATCH (n:Searchable) RETURN count(n) as total")
     total_nodes = result.single()['total']
 
-    print(f"Creating embeddings for {total_nodes} nodes in batches of {batch_size}...")
+    print(f"Creating embeddings for {total_nodes} nodes...")
 
     # Process in chunks
     offset = 0
@@ -158,6 +201,7 @@ def create_embeddings(session, model: SentenceTransformer, batch_size: int = EMB
 
 
 def create_indexes(session, embedding_dim: int):
+    """Create full-text and vector indexes for Searchable nodes."""
     session.run("""
         CREATE FULLTEXT INDEX contentIndex
         FOR (n:Searchable)
@@ -182,7 +226,7 @@ def create_indexes(session, embedding_dim: int):
 
 
 def main():
-    print("Intialising SentenceTransformer model...")
+    print("Initialising SentenceTransformer model...")
     model = SentenceTransformer(EMBEDDING_MODEL)
     embedding_dim = model.get_sentence_embedding_dimension()
 
@@ -195,18 +239,28 @@ def main():
             # Clear existing data
             clear_neo4j(session)
 
-            for file in tqdm([GLOBALS] + PROJECTS):
-                data = load_data(f'../data/{file}')
+            # Process global file
+            data = load_data(f'data/{GLOBALS}')
+            delta_nodes, delta_relationships = populate_neo4j(session, data)
+            inserted_nodes += delta_nodes
+            inserted_relationships += delta_relationships
+
+            # Process project files
+            for file in tqdm(PROJECTS):
+                data = load_data(f'data/{file}')
                 delta_nodes, delta_relationships = populate_neo4j(session, data)
                 inserted_nodes += delta_nodes
                 inserted_relationships += delta_relationships
 
+                # Create BELONGS_TO_PROJECT relationships
+                project_rels = create_project_relationships(session, data)
+                inserted_relationships += project_rels
+
             print(f"Inserted {inserted_nodes} nodes and {inserted_relationships} relationships.")
 
             # Create embeddings in batches
-            print("Creating embeddings...")
             create_embeddings(session, model)
-            # Create full-text index on Searchable nodes
+            # Create full-text & vector indexes on Searchable nodes
             create_indexes(session, embedding_dim)
 
 
