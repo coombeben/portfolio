@@ -20,11 +20,12 @@ function ChatInterface({ initialMessage, modalOpen }: { initialMessage: string, 
   const { refreshQuota } = useQuota();
 
   useRenderToolCall({
-    name: "execute_cypher",
+    name: "get_project_detail",
     render: ({ args, status }) => {
       return (
         <ToolCallStatus
-          explanation={args?.explanation ?? "Finding relevant projects..."}
+          project_id={args?.project_id ?? "unknown"}
+          focus={args?.focus ?? ["unknown"]}
           status={status}
         />
       );
@@ -36,13 +37,15 @@ function ChatInterface({ initialMessage, modalOpen }: { initialMessage: string, 
       <CopilotChat
         // Messages={CustomMessages}
         Input={CustomInput}
-        onInProgress={async (inProgress) => {
-          if (inProgress) {
-            // Add a small delay before refreshing the quota to ensure the latest usage is reflected
-            await new Promise(r => setTimeout(r, 500));
-            await refreshQuota();
-          }
+        onStopGeneration={async () => {
+          await refreshQuota();
         }}
+        // onInProgress={async (inProgress) => {
+        //   // Add a small delay before refreshing the quota to ensure the latest usage is reflected
+        //   const delay = inProgress ? 20000 : 0;
+        //   await new Promise(r => setTimeout(r, delay));
+        //   await refreshQuota();
+        // }}
         labels={{
           title: "Portfolio Assistant",
           initial: initialMessage,

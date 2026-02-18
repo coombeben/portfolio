@@ -14,7 +14,7 @@ export const POST = async (req: NextRequest) => {
     url: process.env.LANGGRAPH_DEPLOYMENT_URL || "http://localhost:8000/chat/stream",
   });
 
-  // Annoyingly, we need to explicitly forward the cookies with each request
+  // We need to explicitly forward the cookies with each request for FastAPI auth
   const cookieHeader = req.headers.get("cookie");
   if (cookieHeader) {
     agent.headers = {
@@ -25,8 +25,8 @@ export const POST = async (req: NextRequest) => {
 
   const runtime = new CopilotRuntime({
     agents: {
-      // @ts-expect-error - The types for the agent are not fully defined, but it should still work at runtime.
-      sample_agent: agent
+      // @ts-expect-error - The types for the agent are not fully defined, but it will still work at runtime.
+      agent: agent
     }
   });
 

@@ -11,7 +11,7 @@ export default function RootLayout({ children }: {children: React.ReactNode}) {
         <AuthProvider>
           <CopilotKit
             runtimeUrl="/api/copilotkit"
-            agent="sample_agent"
+            agent="agent"
             // enableInspector={false}
           >
             {children}
