@@ -1,9 +1,11 @@
 from typing import Annotated, Literal
 
+from neo4j import AsyncDriver
 from pydantic import BaseModel, Field
 from langchain.messages import AnyMessage, HumanMessage, AIMessage
 from langgraph.graph import add_messages
 
+from app.config import LLMConfig
 
 AudienceMode = Literal['technical', 'non-technical']
 
@@ -15,8 +17,8 @@ class ModerationDecision(BaseModel):
     refusal_message: str | None = Field(None, description="A message shown to the user only when `allow` is `false`. Must be `null` when `allow` is `true`.")
 
 
-# Internal state of the agent
 class State(BaseModel):
+    """State of the conversation between the user and the chatbot."""
     messages: Annotated[list[AnyMessage], add_messages]
     audience_mode: AudienceMode = 'technical'
     moderation_decision: ModerationDecision | None = None
@@ -36,3 +38,20 @@ class State(BaseModel):
             # Ignore ToolMessages for moderation
 
         return HumanMessage(content=message_content)
+
+
+class AgentContext(BaseModel):
+    """Runtime context passed to LangGraph nodes and tools.
+
+    Contains only what the agent needs during execution.
+    Infrastructure concerns (checkpointer, connection strings) are not included.
+    """
+    model_config = {'arbitrary_types_allowed': True}
+
+    # Used by nodes
+    moderator_llm: LLMConfig
+    chat_llm: LLMConfig
+    enable_moderation: bool
+
+    # Used by tools
+    neo4j_driver: 'AsyncDriver'

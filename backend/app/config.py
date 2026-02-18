@@ -4,12 +4,11 @@ from typing import Literal
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings
 from langchain.chat_models import init_chat_model, BaseChatModel
-from neo4j import AsyncDriver
 
 from app.projector import ProjectionConfig
 
 
-__all__ = ['Config', 'settings', 'AgentContext']
+__all__ = ['Config', 'settings']
 
 
 class LLMConfig(BaseModel):
@@ -65,8 +64,7 @@ class ProductionConfig(Config):
     # Redact sensitive content for prod
     projection_config: ProjectionConfig = ProjectionConfig(
         exclude_nodes={"moderator"},
-        redact_tool_args={"execute_cypher": {"cypher"}},
-        redact_tool_results={"execute_cypher"},
+        redact_tool_results={"get_project_detail"},
     )
 
 
@@ -83,20 +81,3 @@ def get_config(config_type: ConfigType = 'production') -> Config:
 
 
 settings = get_config('production')
-
-
-class AgentContext(BaseModel):
-    """Runtime context passed to LangGraph nodes and tools.
-
-    Contains only what the agent needs during execution.
-    Infrastructure concerns (checkpointer, connection strings) are not included.
-    """
-    model_config = {'arbitrary_types_allowed': True}
-
-    # What nodes need
-    moderator_llm: LLMConfig
-    chat_llm: LLMConfig
-    enable_moderation: bool
-
-    # What tools need
-    neo4j_driver: 'AsyncDriver'
