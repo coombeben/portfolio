@@ -6,15 +6,14 @@ from langgraph.graph import StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.runtime import Runtime
 
-from app.config import AgentContext
-from .tools import execute_cypher
-from .models import ModerationDecision, State
+from .tools import get_project_detail
+from .models import ModerationDecision, State, AgentContext
 from .prompts import moderation_instructions, get_chatbot_prompt
 
 __all__ = ['graph']
 
 
-tools = [execute_cypher]
+tools = [get_project_detail]
 
 
 def moderator(state: State, runtime: Runtime[AgentContext]) -> dict:

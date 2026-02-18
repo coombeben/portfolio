@@ -1,0 +1,260 @@
+"""
+Tools for the LangGraph agent.
+"""
+from typing import Literal, Iterable
+
+from langchain.tools import tool
+from langgraph.prebuilt import ToolRuntime
+
+from ..models import AgentContext
+from .models import Node, ProjectMatch, ProjectDetail
+
+__all__ = ['search_knowledge_base', 'get_project_detail']
+
+
+Focus = Literal['TECHNICAL', 'STRATEGIC', 'RESULTS']
+
+
+# noinspection PyIncorrectDocstring
+@tool(parse_docstring=True)
+def execute_cypher(cypher: str, explanation: str, runtime: ToolRuntime[AgentContext]) -> str:
+    """Execute a Cypher query against the Neo4j database.
+
+    Args:
+        cypher (str): The Cypher query to execute.
+        explanation (str): A short, user-facing explainer (a few words) that tells them what you're doing right now.
+    """
+    # Use the shared, pooled driver
+    driver = runtime.context.neo4j_driver
+    results = driver.execute_query(cypher)
+    return '\n'.join((str(record) for record in results.records))
+
+
+def _build_project_query(focuses: Iterable[Focus]) -> str:
+    focus_set: set[str] = set(focuses)
+    query_parts: list[str] = []
+
+    # Track which variables are currently in the Cypher scope
+    # 'p' is our anchor project node
+    scope = {"p"}
+
+    def with_clause(extra: list[str] = None) -> str:
+        """Helper to generate a WITH clause containing all active variables."""
+        current_vars = sorted(list(scope))
+        if extra:
+            # Add temporary calculation variables to the projection
+            return f"WITH {', '.join(current_vars + extra)}"
+        return f"WITH {', '.join(current_vars)}"
+
+    # --- BASE ---
+    query_parts.append("MATCH (p:Project {uid: $project_id})")
+    query_parts.append(with_clause())
+
+    # --- RESULTS ---
+    if "RESULTS" in focus_set:
+        query_parts.append("""
+    OPTIONAL MATCH (p)-[:LEAD_TO]->(o:Outcome)
+    WITH p, [x IN collect(DISTINCT o.description) WHERE x IS NOT NULL] AS outcomes
+    WITH p, CASE WHEN size(outcomes) > 0 THEN { outcomes: outcomes } ELSE NULL END AS results
+        """)
+        scope.add("results")
+
+    # --- TECHNICAL ---
+    if "TECHNICAL" in focus_set:
+        # Components
+        query_parts.append(f"OPTIONAL MATCH (p)-[:COMPOSED_OF]->(c:ArchitectureComponent)")
+        query_parts.append(with_clause(["collect(DISTINCT {uid: c.uid, name: c.name, detail: c.detail}) AS raw_comps"]))
+
+        # Technologies
+        query_parts.append("""
+    OPTIONAL MATCH (p)-[:COMPOSED_OF]->(c2:ArchitectureComponent)-[:IMPLEMENTED_WITH]->(t:Technology)
+        """)
+        query_parts.append(with_clause([
+            "raw_comps AS components",
+            "collect(DISTINCT {uid: t.uid, name: t.name, thoughts: t.thoughts}) AS technologies",
+            "collect(DISTINCT {component_id: c2.uid, technology_id: t.uid}) AS tech_map"
+        ]))
+
+        # Skills
+        query_parts.append("""
+    OPTIONAL MATCH (p)-[:COMPOSED_OF]->(c3:ArchitectureComponent)-[:DEMONSTRATES]->(s:Skill)
+        """)
+        query_parts.append(with_clause([
+            "components", "technologies", "tech_map",
+            "collect(DISTINCT {uid: s.uid, name: s.name}) AS skills",
+            "collect(DISTINCT {component_id: c3.uid, skill_id: s.uid}) AS skill_map"
+        ]))
+
+        # Package Technical
+        query_parts.append(f"""
+    {with_clause()} , {{
+        components: [c IN components WHERE c.uid IS NOT NULL],
+        technologies: [t IN technologies WHERE t.uid IS NOT NULL],
+        skills: [s IN skills WHERE s.uid IS NOT NULL],
+        component_tech_map: [m IN tech_map WHERE m.component_id IS NOT NULL],
+        component_skill_map: [m IN skill_map WHERE m.component_id IS NOT NULL]
+    }} AS technical
+        """)
+        scope.add("technical")
+
+    # --- STRATEGIC ---
+    if "STRATEGIC" in focus_set:
+        # 1. Constraints
+        query_parts.append("OPTIONAL MATCH (p)-[:ENCOUNTERED]->(con:Constraint)")
+        query_parts.append(with_clause([
+            "collect(DISTINCT {uid: con.uid, description: con.description}) AS raw_constraints"
+        ]))
+
+        # 2. Philosophies via Builders
+        query_parts.append("""
+        OPTIONAL MATCH (builder:Person)-[:BUILT]->(p)
+        OPTIONAL MATCH (builder)-[:BELIEVES]->(phil:Philosophy)
+            """)
+        query_parts.append(with_clause([
+            "raw_constraints",
+            "collect(DISTINCT phil) AS phil_nodes",
+            "collect(DISTINCT {uid: phil.uid, statement: phil.statement}) AS raw_phils"
+        ]))
+
+        # 3. Decisions & Mapping (This is where the bug lived)
+        query_parts.append("""
+        OPTIONAL MATCH (phil2:Philosophy)-[:GUIDED]->(d:Decision)
+        WHERE phil2 IN phil_nodes 
+          AND (
+            EXISTS { (d)-[:ADDRESSED]->(:Constraint)<-[:ENCOUNTERED]-(p) } OR 
+            EXISTS { (d)-[:SHAPED]->(:ArchitectureComponent)<-[:COMPOSED_OF]-(p) }
+          )
+
+        // Ensure we only collect constraints/components tied to THIS project
+        OPTIONAL MATCH (d)-[:ADDRESSED]->(dc:Constraint) 
+        WHERE (p)-[:ENCOUNTERED]->(dc)
+
+        OPTIONAL MATCH (d)-[:SHAPED]->(dac:ArchitectureComponent)
+        WHERE (p)-[:COMPOSED_OF]->(dac)
+        """)
+
+        # We MUST include d and phil2 here so they are available for the NEXT step
+        query_parts.append(with_clause([
+            "raw_constraints", "raw_phils", "d", "phil2",
+            "collect(DISTINCT dc.uid) AS d_con_ids",
+            "collect(DISTINCT dac.uid) AS d_comp_ids"
+        ]))
+
+        # 4. Final Aggregation for Strategic
+        # Here we group by the project scope to turn individual 'd' rows into one list
+        query_parts.append(f"""
+        WITH {', '.join(sorted(list(scope)))},
+             [c IN raw_constraints WHERE c.uid IS NOT NULL] AS constraints,
+             [ph IN raw_phils WHERE ph.uid IS NOT NULL] AS philosophies,
+             collect(DISTINCT {{
+                description: d.description,
+                reasoning: d.reasoning,
+                tradeoff: d.tradeoff,
+                addresses_constraint_ids: [x IN d_con_ids WHERE x IS NOT NULL],
+                affects_component_ids: [x IN d_comp_ids WHERE x IS NOT NULL],
+                guided_by_philosophy_ids: [phil2.uid]
+             }}) AS raw_decisions
+
+        WITH {', '.join(sorted(list(scope)))}, 
+             {{
+                constraints: constraints,
+                philosophies: philosophies,
+                decisions: [dec IN raw_decisions WHERE dec.description IS NOT NULL]
+             }} AS strategic
+            """)
+        scope.add("strategic")
+
+    # --- FINAL RETURN ---
+    res_val = "results" if "results" in scope else "NULL"
+    tech_val = "technical" if "technical" in scope else "NULL"
+    strat_val = "strategic" if "strategic" in scope else "NULL"
+
+    query_parts.append(f"""
+    RETURN {{
+        project_name: p.name,
+        results: {res_val},
+        technical: {tech_val},
+        strategic: {strat_val}
+    }} AS projectDetail
+    """)
+
+    return "\n".join(query_parts)
+
+
+# noinspection PyIncorrectDocstring
+@tool
+def search_knowledge_base(
+        query: str,
+        runtime: ToolRuntime[AgentContext],
+        search_scope: list[Node] | None = None
+) -> list[ProjectMatch]:
+    """Perform hybrid semantic and keyword search across the knowledge graph to identify
+    projects relevant to a natural language query.
+
+    Returns projects ranked by relevance, along with supporting evidence nodes that
+    explain why each project matched. Intended as an entry-point discovery tool that
+    helps select project IDs and guide follow-up retrieval using `get_project_detail`.
+
+    Args:
+        query: The natural language query to search for against the hybrid index
+        search_scope: The specific type(s) of node to search within. Defaults to all node types.
+
+    Returns:
+          The top 5 most relevant projects.
+    """
+    pass
+
+
+# noinspection PyIncorrectDocstring
+@tool
+async def get_project_detail(project_id: str, focus: list[Focus], runtime: ToolRuntime[AgentContext]) -> ProjectDetail:
+    """Retrieve detailed information about a specific project.
+
+    Use this tool when you need comprehensive information about a project's technical
+    implementation, strategic decisions, or results. Request only the aspects relevant
+    to the user's question to keep responses focused and efficient.
+
+    Args:
+        project_id: The unique identifier of the project
+        focus: List of aspects to retrieve. Choose from:
+            - "RESULTS": Outcomes and tangible results of the project
+            - "TECHNICAL": Architecture components, technologies used, and skills demonstrated
+            - "STRATEGIC": Constraints faced and decisions made during development
+
+    Returns:
+        ProjectDetail with requested sections populated:
+        - results.outcomes: List of project outcomes
+        - technical.components: Architecture components with IDs for cross-referencing
+        - technical.technologies: Tech stack with thoughts/context
+        - technical.skills: Skills demonstrated by the project
+        - technical.component_tech_map: Which technologies were used in which components
+        - technical.component_skill_map: Which skills are demonstrated by which components
+        - strategic.constraints: Challenges and limitations faced
+        - strategic.decisions: Key choices made, including reasoning, tradeoffs,
+          constraints addressed (by ID), and components affected (by ID)
+    """
+    if not focus:
+        raise ValueError("Must specify at least one focus area")
+
+    cypher = _build_project_query(focus)
+    async with runtime.context.neo4j_driver.session() as session:
+        result = await session.run(cypher, project_id=project_id)
+        record = await result.single()
+
+    if record is None:
+        raise ValueError(f"Project {project_id} not found")
+    return ProjectDetail(**record['projectDetail'])
+
+
+Dimension = Literal['TECHNOLOGY', 'SKILL', 'PHILOSOPHY']
+
+
+@tool
+def analyse_patterns(dimension: Dimension, runtime: ToolRuntime[AgentContext]):
+    """Analyse and aggregate recurring technologies, skills, or philosophies across projects.
+
+    Returns ranked patterns with supporting project evidence. Intended for answering
+    cross-project and meta-level questions about trends, common practices, and repeated
+    problem-solving approaches.
+    """
+    pass
