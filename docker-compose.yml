@@ -42,6 +42,6 @@ services:
       retries: 5
 
 volumes:
-  pg-data:
+  embeddings-data:
   redis-data:
   neo4j-data:
