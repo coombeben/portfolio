@@ -26,10 +26,17 @@ class Config(BaseSettings):
     neo4j_user: str = Field(env='NEO4J_USER')
     neo4j_password: str = Field('', env='NEO4J_PASSWORD')
 
-    postgres_uri: str = Field(env='POSTGRES_URI')
-    postgres_user: str = Field(env='POSTGRES_USER')
-    postgres_password: str = Field(env='POSTGRES_PASSWORD')
-    postgres_db: str = Field(env='POSTGRES_DB')
+    redis_uri: str = Field(env='REDIS_URI')
+    redis_password: str = Field('', env='REDIS_PASSWORD')
+
+    app_password: str = Field(env='APP_PASSWORD')
+
+    # TTL configurations
+    session_ttl: int = 60 * 60 * 24 * 7  # 1 week
+    checkpoint_ttl: dict = {
+        "default_ttl": 60 * 24 * 7,  # 1 week (`AsyncRedisSaver` uses minutes, not seconds)
+        "refresh_on_read": True
+    }
 
     enable_moderation: bool = True
 

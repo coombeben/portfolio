@@ -1,19 +1,17 @@
 import hashlib
+from datetime import date
 from typing import AsyncGenerator
 
 from fastapi import Depends, Request, Response, HTTPException, status
-from psycopg import AsyncConnection, sql
-from psycopg_pool import AsyncConnectionPool
+from redis.asyncio import Redis
 from neo4j import AsyncDriver
 
 from app.config import settings
 
 
-async def get_pg_conn(request: Request) -> AsyncGenerator[AsyncConnection, None]:
-    pool: AsyncConnectionPool = request.app.state.pg_pool
-
-    async with pool.connection() as conn:
-        yield conn
+async def get_redis(request: Request) -> AsyncGenerator[Redis, None]:
+    redis: Redis = request.app.state.redis
+    yield redis
 
 
 async def get_neo4j_driver(request: Request) -> AsyncGenerator[AsyncDriver, None]:
@@ -28,15 +26,14 @@ def user_identifier(request: Request) -> str:
     return hashed_ip
 
 
-async def requires_auth(request: Request, response: Response, conn: AsyncConnection = Depends(get_pg_conn)) -> str:
+async def requires_auth(request: Request, response: Response, redis: Redis = Depends(get_redis)) -> str:
     """Marks a route as requiring authentication."""
     session_id = request.cookies.get('session')
     if session_id is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not logged in")
 
-    result = await conn.execute("SELECT id FROM sessions WHERE id = %s", (session_id,))
-    session = await result.fetchone()
-    if session is None:
+    exists = await redis.exists(f"session:{session_id}")
+    if not exists:
         response.delete_cookie('session')
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not logged in")
 
@@ -45,19 +42,17 @@ async def requires_auth(request: Request, response: Response, conn: AsyncConnect
 
 async def enforce_daily_quota(
         session_id: str = Depends(requires_auth),
-        conn: AsyncConnection = Depends(get_pg_conn)
+        redis: Redis = Depends(get_redis)
 ) -> None:
     """Enforces a daily limit on the number of messages sent to the endpoint."""
-    query = sql.SQL("""
-    INSERT INTO endpoint_usage (session_id, usage_date, message_count)
-    VALUES (%s, CURRENT_DATE, 1)
-    ON CONFLICT (session_id, usage_date)
-    DO UPDATE SET message_count = endpoint_usage.message_count + 1
-    RETURNING message_count
-    """)
+    today = date.today().isoformat()
+    quota_key = f"quota:{session_id}:{today}"
 
-    result = await conn.execute(query, (session_id,))
-    count, = await result.fetchone()
+    count = await redis.incr(quota_key)
+    if count == 1:
+        # Expire at end of day: 24 h is a safe TTL
+        await redis.expire(quota_key, 86400)
+
     if count > settings.daily_limit:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
