@@ -5,7 +5,7 @@ import {
   CopilotKitCSSProperties,
 } from "@copilotkit/react-ui";
 
-import { useRenderToolCall } from "@copilotkit/react-core";
+import { useRenderToolCall, useCoAgent } from "@copilotkit/react-core";
 import { Header } from "@/components/Header";
 import {CustomInput} from "@/components/Input";
 import {ToolCallStatus} from "@/components/ToolCallStatus";
@@ -15,6 +15,10 @@ import LoginScreen from "@/components/LoginScreen";
 import { useAuth } from "@/context/AuthContext";
 
 const AUDIENCE_STORAGE_KEY = "portfolio-audience-mode";
+
+type AgentState = {
+  audience_mode: AudienceMode | null;
+};
 
 function ChatInterface({ initialMessage, modalOpen }: { initialMessage: string, modalOpen: boolean }) {
   const { refreshQuota } = useQuota();
@@ -35,7 +39,6 @@ function ChatInterface({ initialMessage, modalOpen }: { initialMessage: string, 
   return (
     <section className="chatShell" aria-hidden={modalOpen}>
       <CopilotChat
-        // Messages={CustomMessages}
         Input={CustomInput}
         onStopGeneration={async () => {
           await refreshQuota();
@@ -62,6 +65,11 @@ export default function Page() {
   const [audienceMode, setAudienceMode] = useState<AudienceMode | null>(null);
   const [hasHydrated, setHasHydrated] = useState(false);
 
+  const { state , setState } = useCoAgent<AgentState>({
+    name: "agent",
+    initialState: { audience_mode: null }
+  })
+
   useEffect(() => {
     setHasHydrated(true);
 
@@ -72,6 +80,11 @@ export default function Page() {
   }, []);
 
   useEffect(() => {
+    if (audienceMode === null) return;
+    setState({ audience_mode: audienceMode });
+  }, [audienceMode, setState]);
+
+  useEffect(() => {
     if (!hasHydrated) return;
 
     document.body.classList.toggle("modal-open", audienceMode === null);
@@ -80,6 +93,7 @@ export default function Page() {
   const handleSelectMode = (mode: AudienceMode) => {
     window.localStorage.setItem(AUDIENCE_STORAGE_KEY, mode);
     setAudienceMode(mode);
+    setState({ audience_mode: mode });
   };
 
   const initialMessage = useMemo(() => {
