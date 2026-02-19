@@ -8,7 +8,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-__all__ = ['ProjectDetail', 'ProjectMatch']
+__all__ = ['ProjectDetail', 'Evidence', 'ProjectMatch']
 
 
 Node = Literal['Person', 'Project', 'Outcome', 'Philosophy', 'Decision', 'ArchitectureComponent', 'Constraint',
