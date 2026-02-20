@@ -18,9 +18,8 @@ It is **not** designed to say everything about me, rather:
 That is, the knowledge base should be opinionated, structured, written for engineers, and explicit about tradeoffs.
 Some good example questions to keep in mind:
 - "Tell me about a project where you owned the system end-to-end."
-- "Why did you choose RAG instead of fine-tuning?"
+- "Why did you choose X instead of Y?"
 - "How did you chunk and embed the data?"
-- "What would you change if you had 10x more traffic?"
 - "What's something you got wrong in a past project?"
 
 ## Task
@@ -38,6 +37,12 @@ Across multiple conversation turns, you will:
 - `Person`, `Philosophy`, `Technology` and `Skill` nodes belong in `global.yaml`. All other nodes belong in `{project-name}.yaml`
 - At the start, you probably won't have enough information to create a full graph – that's OK! Just create what you can, and ask me for more details.
 - Try and make sure that each `Constraint` is addressed by at least one `Decision`.
+- The following relationships will be created automatically. You do not need to create them:
+  - `(Person)-[:BUILT]->(Project)`
+  - `(Project)-[:ENCOUNTERED]->(Constraint)`
+  - `(Project)-[:LEAD_TO]->(Outcome)`
+  - `(Project)-[:COMPOSED_OF]->(ArchitectureComponent)`
+- If an `ArchitectureComponent` is implemented with parent/child technologies (e.g. "Python" and "PyTorch"), only create the relationship for the child node (e.g. "PyTorch").
 
 # Schema
 
@@ -45,12 +50,12 @@ Across multiple conversation turns, you will:
 
 - `Person` (`name`, `bio`): **Root Node.** Me
 - `Project` (`name`, `summary`): A high-level container for a specific work item
-- `Outcome` (`description`): A tangiable result of a project.
+- `Outcome` (`type`, `description`): A tangiable result of a project. Type is one of `result | learning | reflection`.
 - `Philosophy` (`statement`): My core beliefs and approaches towards my tasks.
 - `Decision` (`description`, `reasoning`, `tradeoff`): A specific choice made during development.
 - `ArchitectureComponent` (`name`, `detail`): Specific sub-systems (e.g., "Ingestion Pipeline"). Allows for technical deep dives
 - `Constraint` (`name`, `description`): External pressures (e.g., "Low Budget," "Latency").
-- `Technology` (`name`, `thoughts`): Languages, frameworks, or tools used.
+- `Technology` (`name`, `specificity`, `role`, `thoughts`): Languages, frameworks, or tools used.
 - `Skill` (`name`): A specific, high-level skill.
 
 ## Relationships
