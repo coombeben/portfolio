@@ -1,5 +1,22 @@
 """
 Script to populate a Neo4j database with data from the project files.
+
+This script has two main purposes:
+1. Populate the database with the initial data from the project files. This includes creating
+ implied relationships between nodes based on their types, as well as creating embeddings for
+ Searchable nodes.
+2. Sanity check the data against the defined schema. As the YAML files are created using an LLM,
+ there is a risk of hallucinated or malformed data. This script will raise errors if the data
+ doesn't conform to the expected structure, ensuring that only valid data is inserted into the
+ database.
+
+Steps:
+1. Prepare the database by clearing existing data and creating necessary constraints and indexes.
+2. Load the global data from the GLOBALS file.
+3. Load the project data from the PROJECTS files.
+4. Create implicit relationships between nodes based on their types.
+5. Create BELONGS_TO_PROJECT relationships for all nodes in the project files.
+6. Create embeddings for all Searchable nodes.
 """
 import os
 
@@ -7,7 +24,6 @@ import yaml
 from dotenv import load_dotenv
 from neo4j import GraphDatabase, Session
 from tqdm import tqdm
-from sentence_transformers import SentenceTransformer
 
 load_dotenv()
 
@@ -20,7 +36,7 @@ NODE_TYPES = {
     'Decision': {'description', 'reasoning', 'tradeoff'},
     'ArchitectureComponent': {'name', 'detail'},
     'Constraint': {'name', 'description'},
-    'Technology': {'name', 'thoughts'},
+    'Technology': {'name', 'specificity', 'role', 'thoughts'},
     'Skill': {'name'},
     'Searchable': {'content', 'embedding'}  # Meta-label. Used for hybrid search.
 }
@@ -46,12 +62,10 @@ assert len(RELATIONSHIP_TYPES) == len(RELATIONS)
 assert all(relation[2] in NODE_TYPES for relation in RELATIONS)
 
 
-URI = "neo4j://localhost"
-AUTH = ('neo4j', os.getenv('NEO4J_PASSWORD'))
 GLOBALS = 'global.yaml'
 PROJECTS = ['trade-agent.yaml', 'funding-finder.yaml', 'virtual-analyst.yaml', 'this-project.yaml']
-EMBEDDING_MODEL = os.environ['HF_EMBEDDING_MODEL']
 EMBEDDING_BATCH_SIZE = 32
+EMBEDDING_DIM = 384
 
 
 def load_data(filename: str) -> dict:
@@ -81,7 +95,7 @@ def load_data(filename: str) -> dict:
     return projects
 
 
-def prepare_neo4j(session: Session, embedding_dim: int) -> None:
+def prepare_neo4j(session: Session, embedding_dim: int = EMBEDDING_DIM) -> None:
     """Prepares the Neo4j database by clearing existing data and creating necessary constraints and indexes."""
     # Clear existing data
     session.run("MATCH (n) DETACH DELETE n")
@@ -89,6 +103,8 @@ def prepare_neo4j(session: Session, embedding_dim: int) -> None:
     # Ensure UID is unique across all nodes
     session.run("CREATE CONSTRAINT global_uid_uniqueness IF NOT EXISTS "
                 "FOR (n:Base) REQUIRE n.uid IS UNIQUE")
+
+    # Ideally, we'd create property existence constraints too, but that's an Enterprise feature -_-
 
     # Create indexes for fast lookup of nodes by UID
     session.run("CREATE INDEX base_uid_index IF NOT EXISTS FOR (n:Base) ON (n.uid)")
@@ -132,9 +148,11 @@ def populate_neo4j(session: Session, data: dict) -> tuple[int, int]:
             content = f"{node_type}\n{str_properties}"
             properties['content'] = content
 
-            # Build the Cypher query with both semantic label and Searchable label
+            # Build the Cypher query with: semantic label, Base label, and Searchable label
             props_string = ", ".join([f"{key}: ${key}" for key in properties.keys()])
-            query = f"CREATE (n:{node_type}:Base:Searchable {{uid: $uid, {props_string}}})"
+            # "Person" shouldn't appear in search results, so don't give it the Searchable label
+            extra_labels = 'Base:Searchable' if node_type != 'Person' else 'Base'
+            query = f"CREATE (n:{node_type}:{extra_labels} {{uid: $uid, {props_string}}})"
 
             params = {'uid': node_id, **properties}
             session.run(query, params)
@@ -168,7 +186,7 @@ def create_project_relationships(session: Session, data: dict) -> int:
             project_uid = project_nodes[0]['uid']
 
     if not project_uid:
-        return 0
+        raise ValueError("No Project node found in this file.")
 
     # Collect all unique UIDs referenced in this file (from nodes and relationships)
     referenced_uids = set()
@@ -199,43 +217,25 @@ def create_project_relationships(session: Session, data: dict) -> int:
     return len(referenced_uids)
 
 
-def create_embeddings(session: Session, model: SentenceTransformer, batch_size: int = EMBEDDING_BATCH_SIZE) -> None:
+def create_embeddings(
+    session: Session,
+    batch_size: int = EMBEDDING_BATCH_SIZE
+) -> None:
     """Create embeddings for all Searchable nodes in batches."""
-    # Get total count
-    result = session.run("MATCH (n:Searchable) RETURN count(n) as total")
-    total_nodes = result.single()['total']
-
-    print(f"Creating embeddings for {total_nodes} nodes...")
-
-    # Process in chunks
-    offset = 0
-    with tqdm(total=total_nodes) as pbar:
-        while offset < total_nodes:
-            # Fetch a batch of nodes
-            result = session.run(
-                "MATCH (n:Searchable) RETURN n.uid as uid, n.content as content SKIP $offset LIMIT $limit",
-                {'offset': offset, 'limit': batch_size}
-            )
-            batch = [(record['uid'], record['content']) for record in result]
-
-            if not batch:
-                break
-
-            uids = [uid for uid, _ in batch]
-            contents = [content for _, content in batch]
-
-            # Generate embeddings for the batch
-            embeddings = model.encode(contents, show_progress_bar=False)
-
-            # Update nodes with embeddings
-            for uid, embedding in zip(uids, embeddings):
-                session.run(
-                    "MATCH (n:Searchable {uid: $uid}) SET n.embedding = $embedding",
-                    {'uid': uid, 'embedding': embedding.tolist()}
-                )
-
-            offset += len(batch)
-            pbar.update(len(batch))
+    query = f"""
+    MATCH (s:Searchable WHERE s.content IS NOT NULL)
+    WITH collect(s) AS searchableList, 
+         count(*) AS total,
+         $batch_size AS batchSize 
+    UNWIND range(0, total-1, batchSize) AS batchStart 
+    CALL (searchableList, batchStart, batchSize) {{
+        WITH [searchable IN searchableList[batchStart .. batchStart + batchSize] | searchable.content] AS batch 
+        CALL ai.text.embedBatch(batch, 'OpenAI', {{ token: '-', model: '{os.environ["HF_EMBEDDING_MODEL"]}' }}) YIELD index, vector
+        CALL db.create.setNodeVectorProperty(searchableList[batchStart + index], 'embedding', toFloatList(vector)) 
+    }} IN CONCURRENT TRANSACTIONS OF 1 ROW
+    """
+    session.run(query, {'batch_size': batch_size})
+    return
 
 
 def create_implicit_relationships(session: Session, data: dict) -> int:
@@ -288,18 +288,17 @@ def create_implicit_implemented_with(session: Session) -> int:
 
 
 def main():
-    print("Initialising SentenceTransformer model...")
-    model = SentenceTransformer(EMBEDDING_MODEL)
-    embedding_dim = model.get_sentence_embedding_dimension()
-
     print("Populating Neo4j database...")
+    neo4j_uri = os.environ['NEO4J_URI']
+    neo4j_auth = ('neo4j', os.getenv('NEO4J_PASSWORD'))
+
     inserted_nodes, inserted_relationships = 0, 0
-    with GraphDatabase.driver(URI, auth=AUTH) as driver:
+    with GraphDatabase.driver(neo4j_uri, auth=neo4j_auth) as driver:
         driver.verify_connectivity()
 
         with driver.session() as session:
             # Clear existing data, create constraints and indexes
-            prepare_neo4j(session, embedding_dim)
+            prepare_neo4j(session)
 
             # Process global file
             data = load_data(f'data/{GLOBALS}')
@@ -328,7 +327,8 @@ def main():
             print(f"Inserted {inserted_nodes} nodes and {inserted_relationships} relationships.")
 
             # Create embeddings in batches
-            create_embeddings(session, model)
+            print('Creating embeddings...')
+            create_embeddings(session)
 
 
 if __name__ == "__main__":
