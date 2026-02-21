@@ -11,6 +11,12 @@ services:
 #      neo4j:
 #        condition: service_healthy
 
+  jaeger:
+    image: jaegertracing/jaeger:2.15.1
+    ports:
+      - "16686:16686"
+      - "4318:4318"
+
   redis:
     image: redis:8.6
     command: redis-server --save 60 1 --requirepass ${REDIS_PASSWORD} --loglevel warning
@@ -53,8 +59,8 @@ services:
       - embeddings-data:/data
 
 volumes:
+  trace-data:
   embeddings-data:
   redis-data:
   neo4j-data:
   neo4j-plugins:
-
