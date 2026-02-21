@@ -100,7 +100,7 @@ function ChatInterface({ initialMessage, modalOpen }: { initialMessage: string, 
         Input={CustomInput}
         onInProgress={async (inProgress) => {
           // Add a small delay before refreshing the quota to ensure the latest usage is reflected
-          const delay = inProgress ? 20000 : 0;
+          const delay = inProgress ? 2000 : 0;
           await new Promise(r => setTimeout(r, delay));
           await refreshQuota();
         }}
