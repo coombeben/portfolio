@@ -16,17 +16,18 @@ __all__ = ['graph']
 tools = [get_project_detail]
 
 
-def moderator(state: State, runtime: Runtime[AgentContext]) -> dict:
+async def moderator(state: State, runtime: Runtime[AgentContext]) -> dict:
     """Verify the content of the message."""
     messages = [
         SystemMessage(moderation_instructions),
         state.to_moderator_inputs()
     ]
-    response: ModerationDecision = (
+    # noinspection PyTypeChecker
+    response: ModerationDecision = await (
         runtime.context.moderator_llm
         .to_chat_model()
         .with_structured_output(ModerationDecision)
-        .invoke(messages)
+        .ainvoke(messages)
     )
     return {'moderation_decision': response}
 
@@ -48,17 +49,18 @@ def refusal(state: State) -> dict:
     return {'messages': [AIMessage(content=refusal_message)]}
 
 
-def chatbot(state: State, runtime: Runtime[AgentContext]) -> dict:
-    """Creates cypher queries and responds to the user message."""
+async def chatbot(state: State, runtime: Runtime[AgentContext]) -> dict:
+    """Calls tools and responds to the user message."""
+    system_message = await get_chatbot_prompt(state.audience_mode, runtime)
     messages = [
-        SystemMessage(get_chatbot_prompt(state.audience_mode)),
+        SystemMessage(system_message),
         *state.messages,
     ]
-    response = (
+    response = await (
         runtime.context.chat_llm
         .to_chat_model()
         .bind_tools(tools)
-        .invoke(messages)
+        .ainvoke(messages)
     )
     return {'messages': [response]}
 

@@ -1,9 +1,31 @@
 """
 Prompts for the LLMs
 """
+import asyncio
+
+from langgraph.runtime import Runtime
+
 from .models import AudienceMode
+from app.agent.models import AgentContext
 
 __all__ = ['moderation_instructions', 'get_chatbot_prompt']
+
+# This is quite an ugly way of caching the list of projects, but it'll do for a demo.
+_projects: str | None = None
+_projects_lock = asyncio.Lock()
+
+
+async def _get_projects(runtime: Runtime[AgentContext]) -> str:
+    """Returns a list of projects in the database."""
+    cypher = "MATCH (p:Project) RETURN p.uid, p.name, p.description"
+    async with runtime.context.neo4j_driver.session() as session:
+        result = await session.run(cypher)
+        records = await result.values()
+
+    projects = []
+    for uid, name, description in records:
+        projects.append(f"- `{uid}` - {name}: {description}")
+    return "\n".join(projects)
 
 
 moderation_instructions = """\
@@ -106,7 +128,7 @@ Output:
 {
   "reasoning": "The message contains hostile language but still references the developer's work. It should be redirected into constructive discussion.",
   "allow": false,
-  "refusal_message": "I'm happy to discuss design decisions, trade-offs, or technical details of the project. If you have specific feedback or questions, please feel free to ask. This portfolio chatbot is intended to support professional and constructive discussion."
+  "refusal_message": "I'm happy to discuss design decisions, trade-offs, or technical details of the project. If you have specific questions, please feel free to ask. This portfolio chatbot is intended to support professional and constructive discussion."
 }
 ```
 <Example type="Slightly Off Topic but Harmless">
@@ -218,11 +240,20 @@ You are not a marketing or sales agent. You communicate like a thoughtful, exper
 - Distinguish outcomes, intent, and interpretation
 - State uncertainty or scope limits when relevant
 - Avoid superlatives unless directly supported by metrics
+
+<human_boundary>
+Some portfolio details may be incomplete or intentionally omitted, as the data was manually curated.
+When relevant information is missing:
+- Say so plainly and without apology
+- Do not infer or reconstruct missing details
+- Where appropriate, note that Ben could clarify this directly in conversation or an interview
+</human_boundary>
 </epistemic_rules>
 
 <instructions>
 1. **Analyse**
 Determine whether the question requires portfolio data.
+If the question does not require portfolio data, answer directly without querying tools.
 
 2. **Query**
 Use the tools provided to get details about a relevant project.
@@ -239,17 +270,22 @@ Adjust communication based on the active audience mode.
 </audience_adaptation>
 </task>
 <projects>
-The following projects are available for analysis:
-- `project-interactive-portfolio` - Interactive Portfolio (This project): The very system you're interacting with right now! A chatbot interface to a Neo4j graph database of my work, designed to help users explore my projects and experience through natural language queries.
-- `project-trade-agent` - Trade Agent: A POC chatbot agent designed to help small-scale traders with trade. This agent was able to support users by: finding relevant guidance from HMRC's website, classifying goods into one of 21,000 categories, and looking up rates/duties on goods via an API.
-- `project-funding-finder` - Farm Funding Finder: A POC for DEFRA enabling farmers to discover relevant grants through natural language queries about their land. Combined graph RAG with LLM reranking to search a knowledge graph built from 400 unstructured web pages describing funding schemes and eligibility criteria.
-- `project-virtual-analyst` - Virtual Analyst: A production-ready multi-agent chatbot system that answers data queries in minutes instead of days. Queries SQL databases for customer/sales/store data and uses internet research for additional context. Designed for modularity to allow clients to add new agents as data sources expand.
+The following projects are available:
+{projects}
 
 This is not a complete list of Ben’s work — only a curated subset of representative projects.
+If a project is not listed here, it isn't available in the data.
 </projects>
 """
 
-def get_chatbot_prompt(audience_mode: AudienceMode) -> str:
+
+async def get_chatbot_prompt(audience_mode: AudienceMode, runtime: Runtime[AgentContext]) -> str:
     """Returns a dynamic prompt for the chatbot based on the audience mode."""
+    global _projects
+    # Prevent race conditions
+    async with _projects_lock:
+        if _projects is None:
+            _projects = await _get_projects(runtime)
+
     mode_instructions = technical_mode if audience_mode == 'technical' else recruiter_mode
-    return chatbot_instructions.format(technical_mode=mode_instructions)
+    return chatbot_instructions.format(technical_mode=mode_instructions, projects=_projects)
