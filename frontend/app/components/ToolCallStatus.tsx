@@ -1,19 +1,12 @@
+// The UI element that shows a tool call
 export function ToolCallStatus({
-  project_id,
-  focus,
+  message,
   status,
 }: {
-  project_id: string;
-  focus: string[];
+  message: string;
   status: "inProgress" | "complete" | (string & {});
 }) {
   const isInProgress = status === "inProgress";
-  const projectName = project_id
-    .split('-')
-    .slice(1)
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
-  const explanation = `Looking up ${focus.toString()} in project "${projectName}"`
 
   return (
     <div className="toolCallStatus" aria-live="polite">
@@ -42,7 +35,7 @@ export function ToolCallStatus({
         )}
       </div>
       <div className="toolCallStatus__text">
-        <div className="toolCallStatus__label">{explanation}</div>
+        <div className="toolCallStatus__label">{message}</div>
       </div>
     </div>
   );
