@@ -378,9 +378,9 @@ async def summarise_global_patterns(
         conditions = []
         conditions_str = ''
         if roles:
-            conditions.append(f"t.role IN {roles}")
+            conditions.append(f"x.role IN {roles}")
         if specificity:
-            conditions.append(f"t.specificity >= {specificity}")
+            conditions.append(f"x.specificity >= {specificity}")
         if conditions:
             conditions_str = f"WHERE {' AND '.join(conditions)}"
 
