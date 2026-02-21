@@ -17,14 +17,14 @@ _projects_lock = asyncio.Lock()
 
 async def _get_projects(runtime: Runtime[AgentContext]) -> str:
     """Returns a list of projects in the database."""
-    cypher = "MATCH (p:Project) RETURN p.uid, p.name, p.description"
+    cypher = "MATCH (p:Project) RETURN p.uid, p.name, p.summary"
     async with runtime.context.neo4j_driver.session() as session:
         result = await session.run(cypher)
         records = await result.values()
 
     projects = []
-    for uid, name, description in records:
-        projects.append(f"- `{uid}` - {name}: {description}")
+    for uid, name, summary in records:
+        projects.append(f"- `{uid}` - {name}: {summary}")
     return "\n".join(projects)
 
 
@@ -262,6 +262,7 @@ It is rare to require more than 2 tool calls to answer a user query.
 
 3. **Synthesise**
 Respond using only retrieved data and explicit relationships.
+You should **never** reference internal IDs in your response.
 </instructions>
 <audience_mode>{technical_mode}</audience_mode>
 
