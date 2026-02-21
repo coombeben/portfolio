@@ -10,6 +10,7 @@ Provides three tools:
 """
 from typing import Literal, Iterable
 
+from pydantic import BaseModel, Field
 from langchain_core.tools import tool
 from langgraph.prebuilt import ToolRuntime
 
@@ -344,8 +345,16 @@ Role = Literal['LANGUAGE', 'FRAMEWORK', 'INFRASTRUCTURE', 'DATA', 'INTERFACE', '
 Specificity = Literal[1, 2, 3]
 
 
+# Gemini doesn't like literal ints so we need to use a field
+# https://github.com/pydantic/pydantic-ai/issues/1691
+class GlobalPatternsInput(BaseModel):
+    dimension: Dimension
+    roles: list[Role] | None = None
+    specificity: int | None = Field(None, ge=1, le=3)
+
+
 # noinspection PyIncorrectDocstring
-@tool
+@tool(args_schema=GlobalPatternsInput)
 async def summarise_global_patterns(
     dimension: Dimension,
     runtime: ToolRuntime[AgentContext],
@@ -356,6 +365,7 @@ async def summarise_global_patterns(
 
     Returns ranked patterns with supporting project evidence. Intended for answering
     cross-project and meta-level questions about trends and common practices.
+    In general, only one of `roles` or `specificity` should be specified.
 
     Args:
         dimension: The global dimension to summarise
