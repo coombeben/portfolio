@@ -37,7 +37,9 @@ async def lifespan(app: FastAPI):
     )
 
     # LangGraph checkpointer
-    async with AsyncRedisSaver(redis_client=redis_client, ttl=settings.ttl_config) as checkpointer:
+    async with AsyncRedisSaver(
+        redis_client=redis_client, ttl=settings.checkpoint_ttl
+    ) as checkpointer:
         await checkpointer.asetup()
 
         agent = graph.compile(checkpointer=checkpointer)
