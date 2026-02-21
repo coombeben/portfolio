@@ -1,37 +1,24 @@
 """
 Tools for the LangGraph agent.
 
-Provides two tools:
-- `search_knowledge_base`: Perform hybrid semantic and keyword search across the knowledge graph to identify projects
-    relevant to a natural language query.
+Provides three tools:
+- `search_knowledge_base`: Perform hybrid semantic and keyword search across the knowledge graph to
+    identify projects relevant to a natural language query.
 - `get_project_detail`: Retrieve detailed information about a specific project.
+- `summarise_global_patterns`: Analyse and aggregate recurring technologies, skills, or philosophies
+    across projects.
 """
 from typing import Literal, Iterable
 
 from langchain_core.tools import tool
 from langgraph.prebuilt import ToolRuntime
 
-from .types import ProjectMatch, Evidence, ProjectDetail
+from .types import ProjectMatch, Evidence, ProjectDetail, Pattern, GlobalPatternSummary
 from app.agent.models import AgentContext
 
-__all__ = ['search_knowledge_base', 'get_project_detail']
+__all__ = ['search_knowledge_base', 'get_project_detail', 'summarise_global_patterns']
 
 Focus = Literal['TECHNICAL', 'STRATEGIC', 'RESULTS']
-
-
-# noinspection PyIncorrectDocstring
-@tool(parse_docstring=True)
-def execute_cypher(cypher: str, explanation: str, runtime: ToolRuntime[AgentContext]) -> str:
-    """Execute a Cypher query against the Neo4j database.
-
-    Args:
-        cypher (str): The Cypher query to execute.
-        explanation (str): A short, user-facing explainer (a few words) that tells them what you're doing right now.
-    """
-    # Use the shared, pooled driver
-    driver = runtime.context.neo4j_driver
-    results = driver.execute_query(cypher)
-    return '\n'.join((str(record) for record in results.records))
 
 
 def _labels_to_focus(labels: list[str]) -> Focus | None:
@@ -353,14 +340,116 @@ async def get_project_detail(project_id: str, focus: list[Focus], runtime: ToolR
 
 
 Dimension = Literal['TECHNOLOGY', 'SKILL', 'PHILOSOPHY']
+Role = Literal['LANGUAGE', 'FRAMEWORK', 'INFRASTRUCTURE', 'DATA', 'INTERFACE', 'DEVOPS']
+Specificity = Literal[1, 2, 3]
 
 
+# noinspection PyIncorrectDocstring
 @tool
-def analyse_patterns(dimension: Dimension, runtime: ToolRuntime[AgentContext]):
+async def summarise_global_patterns(
+    dimension: Dimension,
+    runtime: ToolRuntime[AgentContext],
+    roles: list[Role] | None = None,
+    specificity: Specificity | None = None
+) -> GlobalPatternSummary:
     """Analyse and aggregate recurring technologies, skills, or philosophies across projects.
 
     Returns ranked patterns with supporting project evidence. Intended for answering
-    cross-project and meta-level questions about trends, common practices, and repeated
-    problem-solving approaches.
+    cross-project and meta-level questions about trends and common practices.
+
+    Args:
+        dimension: The global dimension to summarise
+        roles (optional): Restrict TECHNOLOGY patterns to specific roles. Ignored for other
+            dimensions.
+        specificity (optional): Control abstraction level for TECHNOLOGY patterns (1 = high-level,
+            3 = very specific). Ignored for other dimensions.
+
+    Returns:
+        A summary of global patterns in the specified dimension, including:
+        - node_name: The name of the technology, skill, or philosophy
+        - thoughts: Any associated thoughts or context (for technologies)
+        - project_count: How many projects match this pattern
+        - project_ids: Which projects match this pattern
+        - evidence: For each matching project, which components are associated with the pattern
     """
-    pass
+    MAX_RESULTS = 5
+
+    if dimension == 'TECHNOLOGY':
+        conditions = []
+        conditions_str = ''
+        if roles:
+            conditions.append(f"t.role IN {roles}")
+        if specificity:
+            conditions.append(f"t.specificity >= {specificity}")
+        if conditions:
+            conditions_str = f"WHERE {' AND '.join(conditions)}"
+
+        pathway_clause = f"""
+        MATCH (p:Project)-[:COMPOSED_OF]->(c:ArchitectureComponent)
+        MATCH (c)-[:IMPLEMENTED_WITH]->(x:Technology)
+        {conditions_str}
+        """
+        node_name = 'x.name'
+
+    elif dimension == 'SKILL':
+        pathway_clause = """
+        MATCH (p:Project)-[:COMPOSED_OF]->(c:ArchitectureComponent)
+        MATCH (c)-[:DEMONSTRATES]->(s:Skill)
+        """
+        node_name = 'x.name'
+
+    elif dimension == 'PHILOSOPHY':
+        pathway_clause = """
+        MATCH (x:Philosophy)-[:GUIDED]->(d:Decision)
+        MATCH (p:Project)
+        WHERE (d)-[:ADDRESSED]->(:Constraint)<-[:ENCOUNTERED]-(p)
+           OR (d)-[:SHAPED]->(:ArchitectureComponent)<-[:COMPOSED_OF]-(p)
+        """
+        node_name = 'x.statement'
+
+    else:
+        raise ValueError(f"Invalid dimension: {dimension}")
+
+    cypher = f"""
+    {pathway_clause}
+
+    // Group components by project
+    WITH x, p, collect(DISTINCT c.name) AS component_names
+
+    // Collect into a list of project-keyed objects
+    WITH x, 
+         collect(DISTINCT p.uid) AS project_ids,
+         collect({{ 
+           project_id: p.uid, 
+           components: component_names 
+         }}) AS evidence
+
+    RETURN
+      {node_name} AS node_name,
+      x.thoughts,  // may be null
+      size(project_ids) AS project_count,
+      project_ids,
+      evidence
+    ORDER BY project_count DESC
+    LIMIT $max_results"""
+
+    async with runtime.context.neo4j_driver.session() as session:
+        result = await session.run(cypher, max_results=MAX_RESULTS)
+        records = await result.values()
+
+    # Cypher cannot produce records with dynamic keys, so we need to remap in Python
+    patterns = []
+    for name, thoughts, project_count, project_ids, evidence_collection in records:
+        evidence = {e['project_id']: e['components'] for e in evidence_collection}
+        patterns.append(Pattern(
+            name=name,
+            thoughts=thoughts,
+            project_count=project_count,
+            project_ids=project_ids,
+            evidence=evidence
+        ))
+
+    return GlobalPatternSummary(
+        dimension=dimension,
+        patterns=patterns
+    )

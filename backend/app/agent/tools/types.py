@@ -8,7 +8,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-__all__ = ['ProjectDetail', 'Evidence', 'ProjectMatch']
+__all__ = ['ProjectDetail', 'Evidence', 'ProjectMatch', 'Pattern', 'GlobalPatternSummary']
 
 
 Node = Literal['Person', 'Project', 'Outcome', 'Philosophy', 'Decision', 'ArchitectureComponent', 'Constraint',
@@ -117,7 +117,7 @@ class Evidence(BaseModel):
 
 @total_ordering
 class ProjectMatch(BaseModel):
-    """Output model of the search tool"""
+    """Output model of the `search_knowledge_base` tool"""
     project_id: str
     project_name: str
     evidence: list[Evidence] = Field(default_factory=list)
@@ -133,3 +133,17 @@ class ProjectMatch(BaseModel):
 
     def __eq__(self, other):
         return self.relevance_score == other.relevance_score
+
+
+class Pattern(BaseModel):
+    name: str
+    thoughts: str | None = None
+    project_count: int
+    project_ids: list[str]
+    evidence: dict[str, list[str]]  # {project_id: [*evidence]}
+
+
+class GlobalPatternSummary(BaseModel):
+    """Output model of the `summarise_global_patterns` tool"""
+    dimension: str
+    patterns: list[Pattern]
