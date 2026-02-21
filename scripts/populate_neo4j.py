@@ -63,7 +63,10 @@ assert all(relation[2] in NODE_TYPES for relation in RELATIONS)
 
 
 GLOBALS = 'global.yaml'
-PROJECTS = ['trade-agent.yaml', 'funding-finder.yaml', 'virtual-analyst.yaml', 'this-project.yaml']
+PROJECTS = [
+    'trade-agent.yaml', 'funding-finder.yaml', 'virtual-analyst.yaml', 'this-project.yaml',
+    'form-autocomplete.yaml'
+]
 EMBEDDING_BATCH_SIZE = 32
 EMBEDDING_DIM = 384
 
@@ -301,14 +304,14 @@ def main():
             prepare_neo4j(session)
 
             # Process global file
-            data = load_data(f'data/{GLOBALS}')
+            data = load_data(f'../data/{GLOBALS}')
             delta_nodes, delta_relationships = populate_neo4j(session, data)
             inserted_nodes += delta_nodes
             inserted_relationships += delta_relationships
 
             # Process project files
             for file in tqdm(PROJECTS):
-                data = load_data(f'data/{file}')
+                data = load_data(f'../data/{file}')
                 delta_nodes, delta_relationships = populate_neo4j(session, data)
                 inserted_nodes += delta_nodes
                 inserted_relationships += delta_relationships
