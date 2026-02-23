@@ -5,9 +5,6 @@ import logging
 import warnings
 from typing import TYPE_CHECKING
 
-from dotenv import load_dotenv
-load_dotenv()
-
 from pydantic.warnings import UnsupportedFieldAttributeWarning
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware

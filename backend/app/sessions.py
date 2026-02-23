@@ -11,6 +11,7 @@ from app.config import settings
 
 
 async def create_session(redis: Redis, hashed_ip: str) -> str:
+    """Creates a new session for the given IP address."""
     today = date.today().isoformat()
     ip_sessions_key = f"ip_sessions:{hashed_ip}:{today}"
 

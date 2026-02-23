@@ -19,7 +19,13 @@ router = APIRouter(
 
 
 class Login(BaseModel):
+    """Credentials for logging in."""
     password: str
+
+
+class Message(BaseModel):
+    """Simple message response."""
+    message: str
 
 
 @router.post("/login")
@@ -30,7 +36,10 @@ async def login(
     identifier: str = Depends(user_identifier),
 ):
     """Logs in the user."""
-    if not secrets.compare_digest(settings.app_password.encode('utf-8'), login_.password.encode('utf-8')):
+    if not secrets.compare_digest(
+        settings.app_password.encode('utf-8'),
+        login_.password.encode('utf-8')
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect password"
@@ -47,14 +56,14 @@ async def login(
         samesite='lax' if not is_production else 'none',
         max_age=settings.session_ttl
     )
-    return {"message": "Login successful"}
+    return Message(message="Login successful")
 
 
 @router.post("/logout")
 async def logout(response: Response):
     """Logs out the current user."""
     response.delete_cookie('session')
-    return {"message": "Logout successful"}
+    return Message(message="Logout successful")
 
 
 @router.get("/session")
@@ -64,4 +73,4 @@ async def session(_ = Depends(requires_auth)):
     Returns 200 if the session cookie is present and valid.
     Else, 401
     """
-    return {"message": "Session is valid"}
+    return Message(message="Session is valid")

@@ -1,4 +1,6 @@
 """
+This module defines the Pydantic models for the outputs of the various tools used by the agent.
+
 NB: Doing this with `neomodel` would be unbelievably inefficient as it has limited support
 for dynamic queries (akin to sqlalchemy). Instead, we use raw Cypher queries and map the results
  to these Pydantic models.
@@ -11,31 +13,35 @@ from pydantic import BaseModel, Field
 __all__ = ['ProjectDetail', 'Evidence', 'ProjectMatch', 'Pattern', 'GlobalPatternSummary']
 
 
-Node = Literal['Person', 'Project', 'Outcome', 'Philosophy', 'Decision', 'ArchitectureComponent', 'Constraint',
-'Technology', 'Skill']
-Relationship = Literal['BUILT', 'BELIEVES', 'GUIDED', 'ENCOUNTERED', 'COMPOSED_OF', 'LEAD_TO', 'ADDRESSED', 'SHAPED',
-'IMPLEMENTED_WITH', 'DEMONSTRATES']
+Node = Literal['Person', 'Project', 'Outcome', 'Philosophy', 'Decision', 'ArchitectureComponent',
+'Constraint', 'Technology', 'Skill']
+Relationship = Literal['BUILT', 'BELIEVES', 'GUIDED', 'ENCOUNTERED', 'COMPOSED_OF', 'LEAD_TO',
+'ADDRESSED', 'SHAPED', 'IMPLEMENTED_WITH', 'DEMONSTRATES']
 
 
 # Output models
 class Component(BaseModel):
+    """Model for an architecture component node."""
     uid: str
     name: str
     detail: str
 
 
 class Technology(BaseModel):
+    """Model for a technology node."""
     uid: str
     name: str
     thoughts: str
 
 
 class Skill(BaseModel):
+    """Model for a skill node."""
     uid: str
     name: str
 
 
 class Decision(BaseModel):
+    """Model for a decision node."""
     description: str
     reasoning: str
     tradeoff: str
@@ -45,6 +51,7 @@ class Decision(BaseModel):
 
 
 class Philosophy(BaseModel):
+    """Model for a philosophy node."""
     uid: str
     statement: str
 
@@ -63,20 +70,24 @@ class SearchResult(BaseModel):
 
 
 class ComponentTechMap(BaseModel):
+    """Mapping model to link architecture components to technologies."""
     component_id: str
     technology_id: str
 
 
 class ComponentSkillMap(BaseModel):
+    """Mapping model to link architecture components to skills."""
     component_id: str
     skill_id: str
 
 
 class Results(BaseModel):
+    """Output model for results focus"""
     outcomes: list[str] = Field(default_factory=list)
 
 
 class Technical(BaseModel):
+    """Output model for technical focus"""
     components: list[Component] = Field(default_factory=list)
     technologies: list[Technology] = Field(default_factory=list)
     skills: list[Skill] = Field(default_factory=list)
@@ -85,6 +96,7 @@ class Technical(BaseModel):
 
 
 class Strategic(BaseModel):
+    """Output model for strategic focus"""
     constraints: list[Constraint] = Field(default_factory=list)
     philosophies: list[Philosophy] = Field(default_factory=list)
     decisions: list[Decision] = Field(default_factory=list)
@@ -104,6 +116,7 @@ class ProjectDetail(BaseModel):
 
 @total_ordering
 class Evidence(BaseModel):
+    """Model for evidence of a project matching a query"""
     node_type: Node
     focus: Literal['RESULTS', 'TECHNICAL', 'STRATEGIC'] | None
     relevance_score: float
@@ -136,6 +149,7 @@ class ProjectMatch(BaseModel):
 
 
 class Pattern(BaseModel):
+    """Model for a pattern of skills/technologies/philosophies used across multiple projects"""
     name: str
     thoughts: str | None = None
     project_count: int

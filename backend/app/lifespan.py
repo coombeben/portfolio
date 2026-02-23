@@ -23,6 +23,12 @@ __all__ = ['lifespan']
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """C
+    ontext manager for FastAPI application lifespan management.
+
+    Initialises Neo4j and Redis connections, sets up the LangGraph checkpointer, compiles
+    the agent, and attaches the necessary resources to the application state.
+    """
     # Neo4j driver
     neo4j_driver = AsyncGraphDatabase.driver(
         settings.neo4j_uri,

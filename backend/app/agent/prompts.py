@@ -1,3 +1,4 @@
+# pylint: skip-file
 """
 Prompts for the LLMs
 """

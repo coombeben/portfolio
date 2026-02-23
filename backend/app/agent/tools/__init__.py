@@ -121,7 +121,12 @@ async def search_knowledge_base(
     """
 
     async with runtime.context.neo4j_driver.session() as session:
-        result = await session.run(cypher, query_=query, candidate_pool=CANDIDATE_POOL, max_nodes=MAX_NODES)
+        kwargs = {
+            'query_': query,
+            'candidate_pool': CANDIDATE_POOL,
+            'max_nodes': MAX_NODES,
+        }
+        result = await session.run(cypher, **kwargs)
         records = await result.values()
 
     # Post-process to aggregate evidence by project
@@ -301,7 +306,11 @@ def _build_project_query(focuses: Iterable[Focus]) -> str:
 
 # noinspection PyIncorrectDocstring
 @tool
-async def get_project_detail(project_id: str, focus: list[Focus], runtime: ToolRuntime[AgentContext]) -> ProjectDetail:
+async def get_project_detail(
+    project_id: str,
+    focus: list[Focus],
+    runtime: ToolRuntime[AgentContext]
+) -> ProjectDetail:
     """Retrieve detailed information about a specific project.
 
     Use this tool when you need comprehensive information about a project's technical

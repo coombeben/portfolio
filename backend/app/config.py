@@ -1,3 +1,6 @@
+"""
+Configuration management for the application.
+"""
 from functools import cache
 from typing import Literal
 
@@ -14,6 +17,7 @@ Environment = Literal['development', 'production']
 
 
 class LLMConfig(BaseModel):
+    """Configuration for LLMs."""
     provider: str
     name: str
     kwargs: dict = Field(default_factory=dict)
@@ -24,6 +28,7 @@ class LLMConfig(BaseModel):
 
 
 class Config(BaseSettings):
+    """Application configuration."""
     environment: Environment = 'production'
 
     neo4j_uri: str
@@ -73,11 +78,13 @@ class Config(BaseSettings):
 
 
 class DevelopmentConfig(Config):
+    """Development configuration."""
     environment: Environment = 'development'
     daily_limit: int = 1000
 
 
 class ProductionConfig(Config):
+    """Production configuration."""
     # Redact sensitive content for prod
     projection_config: ProjectionConfig = ProjectionConfig(
         exclude_nodes={"moderator"},

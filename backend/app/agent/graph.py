@@ -74,7 +74,11 @@ graph = (
     .add_node('refusal', refusal)
     .add_node('tools', tool_node)
     .add_edge('__start__', 'moderator')
-    .add_conditional_edges('moderator', moderation_router, {'approved': 'chatbot', 'rejected': 'refusal'})
+    .add_conditional_edges(
+        'moderator',
+        moderation_router,
+        path_map={'approved': 'chatbot', 'rejected': 'refusal'}
+    )
     .add_edge('refusal', '__end__')
     .add_conditional_edges('chatbot', tools_condition, ['tools', '__end__'])
     .add_edge('tools', 'chatbot')

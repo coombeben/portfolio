@@ -1,3 +1,12 @@
+"""
+Provides an API for interacting with the chat system, including running agents and
+retrieving quota information.
+
+This module defines endpoints for streaming events via the AG-UI protocol and for
+retrieving user's quota usage on the chat system. It handles integration with
+Neo4j for data retrieval, Redis for quota tracking, and the agent system for
+event processing.
+"""
 import uuid
 from datetime import date
 

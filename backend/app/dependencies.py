@@ -1,3 +1,6 @@
+"""
+Global FastAPI dependencies.
+"""
 import hashlib
 from datetime import date
 from typing import AsyncGenerator
@@ -10,23 +13,33 @@ from app.config import settings
 
 
 async def get_redis(request: Request) -> AsyncGenerator[Redis, None]:
+    """Returns a Redis client instance."""
     redis: Redis = request.app.state.redis
     yield redis
 
 
 async def get_neo4j_driver(request: Request) -> AsyncGenerator[AsyncDriver, None]:
+    """Returns a Neo4j driver instance."""
     driver: AsyncDriver = request.app.state.neo4j_driver
     yield driver
 
 
 def user_identifier(request: Request) -> str:
     """Returns a hashed identifier for the user based on their IP address."""
-    user_ip = request.headers.get("X-Forwarded-For") or request.headers.get("X-Real-IP") or request.client.host
+    user_ip = (
+        request.headers.get("X-Forwarded-For") or
+        request.headers.get("X-Real-IP") or
+        request.client.host
+    )
     hashed_ip = hashlib.sha256(user_ip.encode()).hexdigest()
     return hashed_ip
 
 
-async def requires_auth(request: Request, response: Response, redis: Redis = Depends(get_redis)) -> str:
+async def requires_auth(
+    request: Request,
+    response: Response,
+    redis: Redis = Depends(get_redis)
+) -> str:
     """Marks a route as requiring authentication."""
     session_id = request.cookies.get('session')
     if session_id is None:

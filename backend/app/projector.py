@@ -48,7 +48,9 @@ class ProjectionConfig(BaseModel):
 
 
 # Stolen from ag-ui-langgraph
-def convert_agui_multimodal_to_langchain(content: list[TextInputContent | BinaryInputContent]) -> list[dict[str, Any]]:
+def convert_agui_multimodal_to_langchain(
+    content: list[TextInputContent | BinaryInputContent]
+) -> list[dict[str, Any]]:
     """Convert AG-UI multimodal content to LangChain's multimodal format."""
     langchain_content = []
     for item in content:
@@ -129,7 +131,10 @@ def agui_messages_to_langchain(messages: list[AGUIMessage]) -> list[BaseMessage]
 
 
 class AgentEventProjector:
-    def __init__(self, agent: CompiledStateGraph, config: Optional[ProjectionConfig | dict] = None) -> None:
+    def __init__(
+        self, agent: CompiledStateGraph,
+        config: Optional[ProjectionConfig | dict] = None
+    ) -> None:
         """Initialise the projector with an agent and redaction config."""
         self._agent = agent
         self._config = self._normalize_config(config)
@@ -314,7 +319,10 @@ class AgentEventProjector:
 
             if tool_call_id not in tool_started:
                 tool_started.add(tool_call_id)
-                events.append(ToolCallStartEvent(tool_call_id=tool_call_id, tool_call_name=tool_name))
+                events.append(ToolCallStartEvent(
+                    tool_call_id=tool_call_id,
+                    tool_call_name=tool_name
+                ))
 
             delta = chunk.get("args", "") if isinstance(chunk, dict) else ""
             if delta:
@@ -333,7 +341,10 @@ class AgentEventProjector:
 
             if tool_call_id not in tool_started:
                 tool_started.add(tool_call_id)
-                events.append(ToolCallStartEvent(tool_call_id=tool_call_id, tool_call_name=tool_name))
+                events.append(ToolCallStartEvent(
+                    tool_call_id=tool_call_id,
+                    tool_call_name=tool_name
+                ))
 
             if tool_call_id not in tool_args_emitted:
                 args_delta = self._format_tool_args(tool_name, args)

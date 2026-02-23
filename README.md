@@ -1,5 +1,9 @@
 # Interactive Portfolio
 
+[![linting: pylint](https://img.shields.io/badge/linting-pylint-yellowgreen)](https://github.com/pylint-dev/pylint)
+
+A GraphRAG chatbot for interactive portfolio exploration, built with FastAPI, Next.js, and Neo4j.
+
 ## System Architecture
 
 ```mermaid
