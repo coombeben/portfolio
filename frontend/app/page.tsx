@@ -117,12 +117,13 @@ function ChatInterface({ initialMessage, modalOpen }: { initialMessage: string, 
 
 export default function Page() {
   const { status, isAuthenticated } = useAuth();
-  const [audienceMode, setAudienceMode] = useState<AudienceMode | null>(null);
   const [hasHydrated, setHasHydrated] = useState(false);
 
   const { state , setState } = useCoAgent<AgentState>({
     name: "agent",
-    initialState: { audience_mode: null }
+    initialState: {
+      audience_mode: null
+    }
   })
 
   // Hydration: runs once on mount, defers state updates via setTimeout
@@ -134,7 +135,6 @@ export default function Page() {
     setTimeout(() => {
       setHasHydrated(true);
       if (validStored) {
-        setAudienceMode(validStored);
         setState({ audience_mode: validStored });
       }
     }, 0);
@@ -144,26 +144,26 @@ export default function Page() {
   // Effect: Toggle body class for modal
   useEffect(() => {
     if (!hasHydrated) return;
-    document.body.classList.toggle("modal-open", audienceMode === null);
-  }, [audienceMode, hasHydrated]);
+    document.body.classList.toggle("modal-open", state?.audience_mode === null);
+  }, [state?.audience_mode, hasHydrated]);
 
   const handleSelectMode = (mode: AudienceMode) => {
     window.localStorage.setItem(AUDIENCE_STORAGE_KEY, mode);
-    setAudienceMode(mode);
     setState({ audience_mode: mode });
   };
+
+  const modalOpen = hasHydrated && state?.audience_mode === null;
 
   const initialMessage = useMemo(() => {
     const baseMessage =
       "Hi! I'm here to give you insights into Ben's projects and technical decision-making. Feel free to ask about specific projects, technologies, challenges faced, or anything else you're curious about.";
-    if (!audienceMode) {
+    const mode = state?.audience_mode;
+    if (!mode) {
       return baseMessage;
     }
-    const modeLabel = audienceMode === "technical" ? "Technical" : "Non-technical";
+    const modeLabel = mode === "technical" ? "Technical" : "Non-technical";
     return `${baseMessage} (${modeLabel} mode)`;
-  }, [audienceMode]);
-
-  const modalOpen = hasHydrated && audienceMode === null;
+  }, [state?.audience_mode]);
 
   if (status === "checking") {
     return (
@@ -210,3 +210,4 @@ export default function Page() {
     </QuotaProvider>
   );
 }
+
