@@ -2,13 +2,15 @@ from functools import cache
 from typing import Literal
 
 from pydantic import BaseModel, Field
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from langchain.chat_models import init_chat_model, BaseChatModel
 
 from app.projector import ProjectionConfig
 
 
 __all__ = ['Config', 'settings']
+
+Environment = Literal['development', 'production']
 
 
 class LLMConfig(BaseModel):
@@ -22,14 +24,17 @@ class LLMConfig(BaseModel):
 
 
 class Config(BaseSettings):
-    neo4j_uri: str = Field(env='NEO4J_URI')
-    neo4j_user: str = Field(env='NEO4J_USER')
-    neo4j_password: str = Field('', env='NEO4J_PASSWORD')
+    environment: Environment = 'production'
 
-    redis_uri: str = Field(env='REDIS_URI')
-    redis_password: str = Field('', env='REDIS_PASSWORD')
+    neo4j_uri: str
+    neo4j_user: str
+    neo4j_password: str
 
-    app_password: str = Field(env='APP_PASSWORD')
+    redis_uri: str
+    redis_password: str
+
+    external_domain: str = Field(validation_alias='NEXT_PUBLIC_BASE_URL')
+    app_password: str
 
     # TTL configurations
     session_ttl: int = 60 * 60 * 24 * 7  # 1 week
@@ -37,8 +42,6 @@ class Config(BaseSettings):
         "default_ttl": 60 * 24 * 7,  # 1 week (`AsyncRedisSaver` uses minutes, not seconds)
         "refresh_on_read": True
     }
-
-    enable_moderation: bool = True
 
     # Rate limiting
     # Max sessions per IP
@@ -61,9 +64,16 @@ class Config(BaseSettings):
     # Content redaction
     projection_config: ProjectionConfig = Field(default_factory=ProjectionConfig)
 
+    model_config = SettingsConfigDict(
+        env_file='.env',
+        env_file_encoding='utf-8',
+        env_ignore_empty=True,
+        extra='ignore'
+    )
+
 
 class DevelopmentConfig(Config):
-    enable_moderation: bool = False
+    environment: Environment = 'development'
     daily_limit: int = 1000
 
 
@@ -75,13 +85,10 @@ class ProductionConfig(Config):
     )
 
 
-ConfigType = Literal['development', 'production']
-
-
 @cache
-def get_config(config_type: ConfigType = 'production') -> Config:
+def get_config(environment: Environment = 'production') -> Config:
     """Returns the configuration object based on the environment."""
-    if config_type == 'development':
+    if environment == 'development':
         return DevelopmentConfig()
 
     return ProductionConfig()
