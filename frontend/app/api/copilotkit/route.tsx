@@ -11,7 +11,7 @@ const serviceAdapter = new ExperimentalEmptyAdapter();
 export const POST = async (req: NextRequest) => {
 
   const agent = new HttpAgent({
-    url: process.env.LANGGRAPH_DEPLOYMENT_URL || "http://localhost:8000/chat/stream",
+    url: (process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost') + "/api/chat/stream",
   });
 
   // We need to explicitly forward the cookies with each request for FastAPI auth
@@ -26,7 +26,7 @@ export const POST = async (req: NextRequest) => {
   const runtime = new CopilotRuntime({
     agents: {
       // @ts-expect-error - The types for the agent are not fully defined, but it will still work at runtime.
-      agent: agent
+      'agent': agent
     }
   });
 
@@ -35,7 +35,7 @@ export const POST = async (req: NextRequest) => {
     serviceAdapter,
     endpoint: "/api/copilotkit",
     cors: {
-      origin: "http://localhost:3000,http://localhost:8000",
+      origin: process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost',
       credentials: true,
   }
   });

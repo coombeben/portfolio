@@ -27,7 +27,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const checkSession = useCallback(async () => {
     setStatus("checking");
     try {
-      const response = await apiFetch("/auth/session", { method: "GET" });
+      const response = await apiFetch("/api/auth/session", { method: "GET" });
       if (!response.ok) {
         throw new Error("Session check failed");
       }
@@ -43,7 +43,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = useCallback(async (password: string) => {
-    const response = await fetch("/auth/login", {
+    const response = await fetch("/api/auth/login", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
