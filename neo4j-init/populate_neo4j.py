@@ -1,3 +1,11 @@
+# /// script
+# dependencies = [
+#   "pyyaml",
+#   "neo4j",
+# ]
+# [tool.uv]
+# exclude-newer = "2026-02-20T00:00:00Z"
+# ///
 """
 Script to populate a Neo4j database with data from the project files.
 
@@ -19,13 +27,11 @@ Steps:
 6. Create embeddings for all Searchable nodes.
 """
 import os
+from pathlib import Path
 
 import yaml
-from dotenv import load_dotenv
 from neo4j import GraphDatabase, Session
-from tqdm import tqdm
 
-load_dotenv()
 
 # Define the graph schema
 NODE_TYPES = {
@@ -69,12 +75,15 @@ PROJECTS = [
 ]
 EMBEDDING_BATCH_SIZE = 32
 EMBEDDING_DIM = 384
+DATA_DIR = Path('/data')
+if not DATA_DIR.exists():
+    raise ValueError(f"Data directory not found: {DATA_DIR}")
 
 
-def load_data(filename: str) -> dict:
+def load_data(path: Path) -> dict:
     """Loads data from a YAML file into a dictionary.
     Validates the data against the defined schema."""
-    with open(filename, 'r', encoding='utf-8') as f:
+    with path.open('r', encoding='utf-8') as f:
         projects = yaml.safe_load(f)
 
     # Validate
@@ -304,14 +313,14 @@ def main():
             prepare_neo4j(session)
 
             # Process global file
-            data = load_data(f'../data/{GLOBALS}')
+            data = load_data(DATA_DIR / GLOBALS)
             delta_nodes, delta_relationships = populate_neo4j(session, data)
             inserted_nodes += delta_nodes
             inserted_relationships += delta_relationships
 
             # Process project files
-            for file in tqdm(PROJECTS):
-                data = load_data(f'../data/{file}')
+            for file in PROJECTS:
+                data = load_data(DATA_DIR / file)
                 delta_nodes, delta_relationships = populate_neo4j(session, data)
                 inserted_nodes += delta_nodes
                 inserted_relationships += delta_relationships
