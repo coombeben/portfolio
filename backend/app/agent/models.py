@@ -50,7 +50,6 @@ class AgentContext(BaseModel):
     # Used by nodes
     moderator_llm: LLMConfig
     chat_llm: LLMConfig
-    enable_moderation: bool
 
     # Used by tools
     neo4j_driver: 'AsyncDriver'
