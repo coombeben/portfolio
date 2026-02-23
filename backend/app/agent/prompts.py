@@ -28,6 +28,7 @@ async def _get_projects(runtime: Runtime[AgentContext]) -> str:
     return "\n".join(projects)
 
 
+# Prompt for the Moderator LLM
 moderation_instructions = """\
 <Role>
 You are a moderation assistant for an interactive AI portfolio chatbot created and funded by the developer who owns this system.
@@ -219,6 +220,7 @@ Audience consists of recruiters, talent partners, or non-specialist stakeholders
 
 </recruiter_mode>"""
 
+# Prompt for the Chatbot LLM
 chatbot_instructions = """\
 <task>
 

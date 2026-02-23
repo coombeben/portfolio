@@ -342,6 +342,8 @@ def main():
             print('Creating embeddings...')
             create_embeddings(session)
 
+            print('Done!')
+
 
 if __name__ == "__main__":
     main()

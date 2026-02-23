@@ -342,10 +342,9 @@ async def get_project_detail(project_id: str, focus: list[Focus], runtime: ToolR
 
 Dimension = Literal['TECHNOLOGY', 'SKILL', 'PHILOSOPHY']
 Role = Literal['LANGUAGE', 'FRAMEWORK', 'INFRASTRUCTURE', 'DATA', 'INTERFACE', 'DEVOPS']
-Specificity = Literal[1, 2, 3]
 
 
-# Gemini doesn't like literal ints so we need to use a field
+# Gemini doesn't like literal ints, so we need to use a field
 # https://github.com/pydantic/pydantic-ai/issues/1691
 class GlobalPatternsInput(BaseModel):
     dimension: Dimension
@@ -359,11 +358,11 @@ async def summarise_global_patterns(
     dimension: Dimension,
     runtime: ToolRuntime[AgentContext],
     roles: list[Role] | None = None,
-    specificity: Specificity | None = None
+    specificity: int | None = None
 ) -> GlobalPatternSummary:
     """Analyse and aggregate recurring technologies, skills, or philosophies across projects.
 
-    Returns ranked patterns with supporting project evidence. Intended for answering
+    Returns the top 10 ranked patterns with supporting project evidence. Intended for answering
     cross-project and meta-level questions about trends and common practices.
     In general, only one of `roles` or `specificity` should be specified.
 
@@ -382,7 +381,7 @@ async def summarise_global_patterns(
         - project_ids: Which projects match this pattern
         - evidence: For each matching project, which components are associated with the pattern
     """
-    MAX_RESULTS = 5
+    MAX_RESULTS = 10
 
     if dimension == 'TECHNOLOGY':
         conditions = []

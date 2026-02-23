@@ -24,7 +24,7 @@ class State(BaseModel):
     moderation_decision: ModerationDecision | None = None
 
     def to_moderator_inputs(self) -> HumanMessage:
-        """Converts the state to a human message for the moderator."""
+        """Converts the state to a human message for the Moderator."""
         message_content = ''
         for message in self.messages:
             if isinstance(message, HumanMessage):
@@ -44,7 +44,6 @@ class AgentContext(BaseModel):
     """Runtime context passed to LangGraph nodes and tools.
 
     Contains only what the agent needs during execution.
-    Infrastructure concerns (checkpointer, connection strings) are not included.
     """
     model_config = {'arbitrary_types_allowed': True}
 
