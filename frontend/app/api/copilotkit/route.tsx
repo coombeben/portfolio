@@ -11,7 +11,7 @@ const serviceAdapter = new ExperimentalEmptyAdapter();
 export const POST = async (req: NextRequest) => {
 
   const agent = new HttpAgent({
-    url: (process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost') + "/api/chat/stream",
+    url: (process.env.INTERNAL_API_BASE_URL || 'http://localhost') + "/api/chat/stream",
   });
 
   // We need to explicitly forward the cookies with each request for FastAPI auth
