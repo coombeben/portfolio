@@ -49,14 +49,13 @@ services:
     environment:
       NEO4J_AUTH: "neo4j/${NEO4J_PASSWORD}"
       NEO4J_PLUGINS: '["genai"]'
-      NEO4J_dbms_usage__report.enabled: false
-      NEO4J_server_jvm_additional: "--add-modules jdk.incubator.vector"
     depends_on:
       - tei-embeddings
     volumes:
       - neo4j-data:/data
       - neo4j-plugins:/plugins
-      - ./neo4j/genai.conf:/var/lib/neo4j/conf/genai.conf
+      - ./neo4j/neo4j.conf:/conf/neo4j.conf
+      - ./neo4j/genai.conf:/conf/genai.conf
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider localhost:7474 || exit 1"]
       interval: 10s
