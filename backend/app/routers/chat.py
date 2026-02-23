@@ -54,7 +54,6 @@ async def langgraph_agent_endpoint(
     context = AgentContext(
         moderator_llm=settings.moderator_llm,
         chat_llm=settings.chat_llm,
-        enable_moderation=settings.enable_moderation,
         neo4j_driver=neo4j_driver,
     )
 
@@ -64,7 +63,10 @@ async def langgraph_agent_endpoint(
 
     return StreamingResponse(
         event_generator(),
-        media_type=encoder.get_content_type()
+        media_type=encoder.get_content_type(),
+        headers={
+            'X-Accel-Buffering': 'no'  # Disable nginx buffering
+        }
     )
 
 
