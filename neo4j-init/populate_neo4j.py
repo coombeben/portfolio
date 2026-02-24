@@ -69,13 +69,9 @@ assert all(relation[2] in NODE_TYPES for relation in RELATIONS)
 
 
 GLOBALS = 'global.yaml'
-PROJECTS = [
-    'trade-agent.yaml', 'funding-finder.yaml', 'virtual-analyst.yaml', 'this-project.yaml',
-    'form-autocomplete.yaml'
-]
 EMBEDDING_BATCH_SIZE = 32
 EMBEDDING_DIM = 384
-DATA_DIR = Path('/data')
+DATA_DIR = Path('/data').resolve()
 if not DATA_DIR.exists():
     raise ValueError(f"Data directory not found: {DATA_DIR}")
 
@@ -319,8 +315,11 @@ def main():
             inserted_relationships += delta_relationships
 
             # Process project files
-            for file in PROJECTS:
-                data = load_data(DATA_DIR / file)
+            for file in DATA_DIR.glob('*.yaml'):
+                if file.name == GLOBALS:
+                    continue
+
+                data = load_data(file)
                 delta_nodes, delta_relationships = populate_neo4j(session, data)
                 inserted_nodes += delta_nodes
                 inserted_relationships += delta_relationships
