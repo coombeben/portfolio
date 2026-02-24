@@ -98,10 +98,10 @@ function ChatInterface({ initialMessage, modalOpen }: { initialMessage: string, 
     <section className="chatShell" aria-hidden={modalOpen}>
       <CopilotChat
         Input={CustomInput}
-        onSubmitMessage={async () => {
-          // Add a small delay before refreshing the quota to ensure the latest usage is reflected
-          await new Promise(r => setTimeout(r, 2000));
-          await refreshQuota();
+        onInProgress={async (inProgress) => {
+          if (!inProgress) {
+            await refreshQuota();
+          }
         }}
         labels={{
           title: "Portfolio Assistant",
