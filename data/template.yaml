@@ -1,0 +1,55 @@
+nodes:
+  Project:
+    - uid: project-
+      name: ""
+      summary: ""
+
+  # Constraints
+  Constraint:
+    - uid: constraint-
+      description: ""
+
+  # Decisions
+  Decision:
+    - uid: decision-
+      description: ""
+      reasoning: ""
+      tradeoff: ""
+
+  #  Architecture Components
+  ArchitectureComponent:
+    - uid: arch-
+      name: ""
+      detail: ""
+
+  # Outcomes
+  Outcome:
+    - uid: outcome-
+      type: result | learning | reflection
+      description: ""
+
+relationships:
+  # Philosophies -> decisions
+  GUIDED:
+    - from: philosophy-
+      to: decision-
+
+  # Decision -> constraints
+  ADDRESSED:
+    - from: decision-
+      to: constraint-
+
+  # Decision -> architecture components
+  SHAPED:
+    - from: decision-
+      to: arch-
+
+  # Architecture component -> tech
+  IMPLEMENTED_WITH:
+    - from: arch-
+      to: tech-
+
+  # Architecture component -> skill
+  DEMONSTRATES:
+    - from: arch-
+      to: skill-
