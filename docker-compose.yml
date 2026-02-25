@@ -50,11 +50,12 @@ services:
   neo4j-init:
     build: ./neo4j-init
     environment:
+      GITEA_PAT: ${GITEA_PAT}
+      DATA_BASE_URL: ${DATA_BASE_URL}
+      DATA_VERSION: ${DATA_VERSION}
       NEO4J_URI: ${NEO4J_URI}
       NEO4J_PASSWORD: ${NEO4J_PASSWORD}
       HF_EMBEDDING_MODEL: ${HF_EMBEDDING_MODEL}
-    volumes:
-      - ${PROJECTS_DIR}:/data
     depends_on:
       neo4j:
         condition: service_healthy

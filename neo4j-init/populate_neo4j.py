@@ -1,5 +1,6 @@
 # /// script
 # dependencies = [
+#   "requests",
 #   "pyyaml",
 #   "neo4j",
 # ]
@@ -27,8 +28,11 @@ Steps:
 6. Create embeddings for all Searchable nodes.
 """
 import os
+from io import BytesIO
 from pathlib import Path
+from zipfile import ZipFile
 
+import requests
 import yaml
 from neo4j import GraphDatabase, Session
 
@@ -71,9 +75,21 @@ assert all(relation[2] in NODE_TYPES for relation in RELATIONS)
 GLOBALS = 'global.yaml'
 EMBEDDING_BATCH_SIZE = 32
 EMBEDDING_DIM = 384
-DATA_DIR = Path('/data').resolve()
-if not DATA_DIR.exists():
-    raise ValueError(f"Data directory not found: {DATA_DIR}")
+DOWNLOAD_DIR = Path('/var/tmp').resolve()
+DATA_DIR = DOWNLOAD_DIR / 'data'
+
+
+def download_release(release_url: str, output_path: Path, access_token: str | None = None) -> None:
+    """Downloads a release and extracts the ZIP file."""
+    headers = {}
+    if access_token:
+        headers['Authorization'] = f'token {access_token}'
+
+    response = requests.get(release_url, headers=headers, stream=True)
+    response.raise_for_status()
+
+    with ZipFile(BytesIO(response.content)) as zip_file:
+        zip_file.extractall(output_path)
 
 
 def load_data(path: Path) -> dict:
@@ -295,7 +311,18 @@ def create_implicit_implemented_with(session: Session) -> int:
     return result.single()['total']
 
 
-def main():
+def main() -> None:
+    """Runs the main script."""
+    print('Downloading release...')
+    base_url = os.environ['DATA_BASE_URL']
+    release_version = os.environ['DATA_VERSION']
+    gitea_pat = os.environ['GITEA_PAT']
+    if not all([base_url, release_version, gitea_pat]):
+        raise ValueError("Missing environment variables")
+
+    release_url = f'{base_url}/releases/download/{release_version}/data.zip'
+    download_release(release_url, DOWNLOAD_DIR, gitea_pat)
+
     print("Populating Neo4j database...")
     neo4j_uri = os.environ['NEO4J_URI']
     neo4j_auth = ('neo4j', os.getenv('NEO4J_PASSWORD'))
