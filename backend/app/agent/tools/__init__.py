@@ -350,7 +350,11 @@ async def get_project_detail(
 
 
 Dimension = Literal['TECHNOLOGY', 'SKILL', 'PHILOSOPHY']
-Role = Literal['LANGUAGE', 'FRAMEWORK', 'INFRASTRUCTURE', 'DATA', 'INTERFACE', 'DEVOPS']
+Role = Literal[
+    'programming_and_logic', 'frontend_and_ui', 'backend_and_api', 'data_and_persistence',
+    'ai_models_and_inference', 'agentic_orchestration',  'devops_and_infrastructure',
+    'observability_and_security'
+]
 
 
 # Gemini doesn't like literal ints, so we need to use a field
