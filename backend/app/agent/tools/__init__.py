@@ -177,7 +177,7 @@ def _build_project_query(focuses: Iterable[Focus]) -> str:
     if "RESULTS" in focus_set:
         query_parts.append("""
     OPTIONAL MATCH (p)-[:LEAD_TO]->(o:Outcome)
-    WITH p, [x IN collect(DISTINCT o.description) WHERE x IS NOT NULL] AS outcomes
+    WITH p, collect(DISTINCT CASE WHEN o IS NOT NULL THEN {description: o.description, type: o.type} END) AS outcomes
     WITH p, CASE WHEN size(outcomes) > 0 THEN { outcomes: outcomes } ELSE NULL END AS results
         """)
         scope.add("results")
@@ -320,7 +320,7 @@ async def get_project_detail(
     Args:
         project_id: The unique identifier of the project
         focus: List of aspects to retrieve. Choose from:
-            - "RESULTS": Outcomes and tangible results of the project
+            - "RESULTS": Results, learnings, and reflections of the project
             - "TECHNICAL": Architecture components, technologies used, and skills demonstrated
             - "STRATEGIC": Constraints faced and decisions made during development
 

@@ -57,16 +57,15 @@ class Philosophy(BaseModel):
 
 
 class Constraint(BaseModel):
+    """Model for a constraint node."""
     uid: str
     description: str
 
 
-class SearchResult(BaseModel):
-    node_type: Node
-    uid: str
-    metadata: dict
-    parent_project: str
-    relevance_score: float
+class Outcome(BaseModel):
+    """Model for an outcome node."""
+    description: str
+    type: Literal['result', 'learning', 'reflection']
 
 
 class ComponentTechMap(BaseModel):
@@ -83,7 +82,7 @@ class ComponentSkillMap(BaseModel):
 
 class Results(BaseModel):
     """Output model for results focus"""
-    outcomes: list[str] = Field(default_factory=list)
+    outcomes: list[Outcome] = Field(default_factory=list)
 
 
 class Technical(BaseModel):
