@@ -407,26 +407,29 @@ async def summarise_global_patterns(
             conditions_str = f"WHERE {' AND '.join(conditions)}"
 
         pathway_clause = f"""
-        MATCH (p:Project)-[:COMPOSED_OF]->(c:ArchitectureComponent)
-        MATCH (c)-[:IMPLEMENTED_WITH]->(x:Technology)
+        MATCH (p:Project)-[:COMPOSED_OF]->(y:ArchitectureComponent)
+        MATCH (y)-[:IMPLEMENTED_WITH]->(x:Technology)
         {conditions_str}
         """
+        evidence_property = 'y.name'
         node_name = 'x.name'
 
     elif dimension == 'SKILL':
         pathway_clause = """
-        MATCH (p:Project)-[:COMPOSED_OF]->(c:ArchitectureComponent)
-        MATCH (c)-[:DEMONSTRATES]->(s:Skill)
+        MATCH (p:Project)-[:COMPOSED_OF]->(y:ArchitectureComponent)
+        MATCH (y)-[:DEMONSTRATES]->(s:Skill)
         """
+        evidence_property = 'y.name'
         node_name = 'x.name'
 
     elif dimension == 'PHILOSOPHY':
         pathway_clause = """
-        MATCH (x:Philosophy)-[:GUIDED]->(d:Decision)
+        MATCH (x:Philosophy)-[:GUIDED]->(y:Decision)
         MATCH (p:Project)
-        WHERE (d)-[:ADDRESSED]->(:Constraint)<-[:ENCOUNTERED]-(p)
-           OR (d)-[:SHAPED]->(:ArchitectureComponent)<-[:COMPOSED_OF]-(p)
+        WHERE (y)-[:ADDRESSED]->(:Constraint)<-[:ENCOUNTERED]-(p)
+           OR (y)-[:SHAPED]->(:ArchitectureComponent)<-[:COMPOSED_OF]-(p)
         """
+        evidence_property = 'y.description'
         node_name = 'x.statement'
 
     else:
@@ -436,7 +439,7 @@ async def summarise_global_patterns(
     {pathway_clause}
 
     // Group components by project
-    WITH x, p, collect(DISTINCT c.name) AS component_names
+    WITH x, p, collect(DISTINCT {evidence_property}) AS component_names
 
     // Collect into a list of project-keyed objects
     WITH x, 
