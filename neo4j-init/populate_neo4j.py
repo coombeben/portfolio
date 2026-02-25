@@ -20,12 +20,13 @@ This script has two main purposes:
  database.
 
 Steps:
-1. Prepare the database by clearing existing data and creating necessary constraints and indexes.
-2. Load the global data from the GLOBALS file.
-3. Load the project data from the PROJECTS files.
-4. Create implicit relationships between nodes based on their types.
-5. Create BELONGS_TO_PROJECT relationships for all nodes in the project files.
-6. Create embeddings for all Searchable nodes.
+1. Download the release ZIP file from the specified URL
+2. Prepare the database by clearing existing data and creating necessary constraints and indexes.
+3. Load the global data from the GLOBALS file.
+4. Load the project data from the PROJECTS files.
+5. Create implicit relationships between nodes based on their types.
+6. Create BELONGS_TO_PROJECT relationships for all nodes in the project files.
+7. Create embeddings for all Searchable nodes.
 """
 import os
 from io import BytesIO
