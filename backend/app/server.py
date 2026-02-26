@@ -6,7 +6,7 @@ import warnings
 from typing import TYPE_CHECKING
 
 from pydantic.warnings import UnsupportedFieldAttributeWarning
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, Request, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from neo4j.exceptions import DriverError
 if TYPE_CHECKING:
@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 from app.config import settings
 from app.dependencies import get_redis, get_neo4j_driver
 from app.lifespan import lifespan
+from app.middleware import CloudflareIPMiddleware
 from app.routers import auth, chat
 
 warnings.simplefilter("ignore", category=UnsupportedFieldAttributeWarning)
@@ -28,8 +29,7 @@ app = FastAPI(
     redoc_url=None,
     openapi_url=None
 )
-app.include_router(auth.router)
-app.include_router(chat.router)
+app.add_middleware(CloudflareIPMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.external_domain],
@@ -37,6 +37,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(auth.router)
+app.include_router(chat.router)
 
 
 @app.get("/health", include_in_schema=False)
@@ -56,3 +58,12 @@ async def health(
         )
 
     return {"status": "ok"}
+
+
+@app.get('/ip', include_in_schema=False)
+async def get_ip(request: Request):
+    """Debug route. Returns the client IP and the request client."""
+    return {
+        "client_ip": request.state.client_ip,
+        "request_client": request.client.host
+    }
