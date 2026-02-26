@@ -16,7 +16,6 @@ if TYPE_CHECKING:
 from app.config import settings
 from app.dependencies import get_redis, get_neo4j_driver
 from app.lifespan import lifespan
-from app.middleware import CloudflareIPMiddleware
 from app.routers import auth, chat
 
 warnings.simplefilter("ignore", category=UnsupportedFieldAttributeWarning)
@@ -29,7 +28,6 @@ app = FastAPI(
     redoc_url=None,
     openapi_url=None
 )
-app.add_middleware(CloudflareIPMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.external_domain],
@@ -39,6 +37,15 @@ app.add_middleware(
 )
 app.include_router(auth.router)
 app.include_router(chat.router)
+
+
+@app.middleware('http')
+async def extract_real_ip(request: Request, call_next):
+    real_ip = request.headers.get("x-forwarded-for") or request.client.host
+    # Clean up if it's a comma-separated list
+    request.state.user_ip = real_ip.split(",")[0].strip()
+
+    return await call_next(request)
 
 
 @app.get("/health", include_in_schema=False)
@@ -64,6 +71,6 @@ async def health(
 async def get_ip(request: Request):
     """Debug route. Returns the client IP and the request client."""
     return {
-        "client_ip": request.state.client_ip,
+        "user_ip": request.state.user_ip,
         "request_client": request.client.host
     }
