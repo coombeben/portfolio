@@ -40,6 +40,7 @@ class Config(BaseSettings):
 
     external_domain: str = Field(validation_alias='NEXT_PUBLIC_BASE_URL')
     app_password: str
+    secret_key: str
 
     # TTL configurations
     session_ttl: int = 60 * 60 * 24 * 7  # 1 week

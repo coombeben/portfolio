@@ -1,7 +1,7 @@
 """
 Global FastAPI dependencies.
 """
-import hashlib
+import hmac
 from datetime import date
 from typing import AsyncGenerator
 
@@ -26,12 +26,10 @@ async def get_neo4j_driver(request: Request) -> AsyncGenerator[AsyncDriver, None
 
 def user_identifier(request: Request) -> str:
     """Returns a hashed identifier for the user based on their IP address."""
-    user_ip = (
-        request.headers.get("X-Forwarded-For") or
-        request.headers.get("X-Real-IP") or
-        request.client.host
-    )
-    hashed_ip = hashlib.sha256(user_ip.encode()).hexdigest()
+    # As Uvicorn has the `--proxy-headers --forward-allow-ips *` args, we can use the
+    # client.host to get the real IP address of the user, even behind proxies.
+    ip = request.client.host
+    hashed_ip = hmac.new(settings.secret_key.encode(), ip.encode(), "sha256").hexdigest()
     return hashed_ip
 
 
