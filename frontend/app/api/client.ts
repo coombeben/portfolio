@@ -18,7 +18,8 @@ export async function apiFetch(
   input: RequestInfo | URL,
   init: RequestInit = {},
 ) {
-  const response = await fetch(input, {
+  const url = `${process.env.NEXT_PUBLIC_API_URL}${input}`
+  const response = await fetch(url, {
     ...init,
     credentials: "include",
   });
