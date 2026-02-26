@@ -29,6 +29,7 @@ Steps:
 7. Create embeddings for all Searchable nodes.
 """
 import os
+import logging
 from io import BytesIO
 from pathlib import Path
 from zipfile import ZipFile
@@ -36,6 +37,8 @@ from zipfile import ZipFile
 import requests
 import yaml
 from neo4j import GraphDatabase, Session
+
+logger = logging.getLogger(__name__)
 
 
 # Define the graph schema
@@ -314,7 +317,7 @@ def create_implicit_implemented_with(session: Session) -> int:
 
 def main() -> None:
     """Runs the main script."""
-    print('Downloading release...')
+    logger.info('Downloading release...')
     base_url = os.environ['DATA_BASE_URL']
     release_version = os.environ['DATA_VERSION']
     gitea_pat = os.environ['GITEA_PAT']
@@ -324,7 +327,7 @@ def main() -> None:
     release_url = f'{base_url}/releases/download/{release_version}/data.zip'
     download_release(release_url, DOWNLOAD_DIR, gitea_pat)
 
-    print("Populating Neo4j database...")
+    logger.info("Populating Neo4j database...")
     neo4j_uri = os.environ['NEO4J_URI']
     neo4j_auth = ('neo4j', os.getenv('NEO4J_PASSWORD'))
 
@@ -363,13 +366,13 @@ def main() -> None:
             # Create implicit IMPLEMENTED_WITH relationships to parent technologies
             implicit_tech_rels = create_implicit_implemented_with(session)
             inserted_relationships += implicit_tech_rels
-            print(f"Inserted {inserted_nodes} nodes and {inserted_relationships} relationships.")
+            logger.info(f"Inserted {inserted_nodes} nodes and {inserted_relationships} relationships.")
 
             # Create embeddings in batches
-            print('Creating embeddings...')
+            logger.info('Creating embeddings...')
             create_embeddings(session)
 
-            print('Done!')
+            logger.info('Done!')
 
 
 if __name__ == "__main__":
