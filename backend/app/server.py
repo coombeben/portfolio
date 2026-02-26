@@ -6,7 +6,7 @@ import warnings
 from typing import TYPE_CHECKING
 
 from pydantic.warnings import UnsupportedFieldAttributeWarning
-from fastapi import FastAPI, Depends, Request, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from neo4j.exceptions import DriverError
 if TYPE_CHECKING:
@@ -39,15 +39,6 @@ app.include_router(auth.router)
 app.include_router(chat.router)
 
 
-@app.middleware('http')
-async def extract_real_ip(request: Request, call_next):
-    real_ip = request.headers.get("x-forwarded-for") or request.client.host
-    # Clean up if it's a comma-separated list
-    request.state.user_ip = real_ip.split(",")[0].strip()
-
-    return await call_next(request)
-
-
 @app.get("/health", include_in_schema=False)
 async def health(
     redis: 'Redis' = Depends(get_redis),
@@ -65,12 +56,3 @@ async def health(
         )
 
     return {"status": "ok"}
-
-
-@app.get('/ip', include_in_schema=False)
-async def get_ip(request: Request):
-    """Debug route. Returns the client IP and the request client."""
-    return {
-        "user_ip": request.state.user_ip,
-        "request_client": request.client.host
-    }
