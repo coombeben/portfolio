@@ -43,7 +43,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = useCallback(async (password: string) => {
-    const response = await fetch("/api/auth/login", {
+    const loginUrl = new URL("/api/auth/login", process.env.NEXT_PUBLIC_API_URL || window.location.origin);
+    const response = await fetch(loginUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
