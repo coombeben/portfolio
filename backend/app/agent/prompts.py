@@ -11,22 +11,28 @@ from app.agent.models import AgentContext
 
 __all__ = ['moderation_instructions', 'get_chatbot_prompt']
 
-# This is quite an ugly way of caching the list of projects, but it'll do for a demo.
-_projects: str | None = None
-_projects_lock = asyncio.Lock()
+# This is quite an ugly way of caching, but it'll do for a demo.
+_dynamic_data: dict[str, str] | None = None
+lock = asyncio.Lock()
 
 
-async def _get_projects(runtime: Runtime[AgentContext]) -> str:
+async def _get_projects(runtime: Runtime[AgentContext]) -> dict:
     """Returns a list of projects in the database."""
-    cypher = "MATCH (p:Project) RETURN p.uid, p.name, p.summary"
     async with runtime.context.neo4j_driver.session() as session:
-        result = await session.run(cypher)
-        records = await result.values()
+        result = await session.run("MATCH (p:Person) RETURN p.bio")
+        record = await result.single()
+        bio = record['p.bio']
 
-    projects = []
-    for uid, name, summary in records:
-        projects.append(f"- `{uid}` - {name}: {summary}")
-    return "\n".join(projects)
+        result = await session.run("MATCH (p:Project) RETURN p.uid, p.name, p.summary")
+        records = await result.values()
+        projects = []
+        for uid, name, summary in records:
+            projects.append(f"- `{uid}` - {name}: {summary}")
+
+    return {
+        'bio': bio,
+        'projects': '\n'.join(projects)
+    }
 
 
 # Prompt for the Moderator LLM
@@ -231,6 +237,10 @@ Your role is to help users explore Ben’s professional work by querying a datab
 You are not a marketing or sales agent. You communicate like a thoughtful, experienced practitioner.
 </role>
 
+<bio>
+{bio}
+</bio>
+
 <core_principles>
 - Accuracy over persuasion
 - Evidence over adjectives
@@ -285,11 +295,13 @@ If a project is not listed here, it isn't available in the data.
 
 async def get_chatbot_prompt(audience_mode: AudienceMode, runtime: Runtime[AgentContext]) -> str:
     """Returns a dynamic prompt for the chatbot based on the audience mode."""
-    global _projects
+    global _dynamic_data
     # Prevent race conditions
-    async with _projects_lock:
-        if _projects is None:
-            _projects = await _get_projects(runtime)
+    async with lock:
+        if _dynamic_data is None:
+            _dynamic_data = await _get_projects(runtime)
 
+    bio = _dynamic_data['bio']
+    projects = _dynamic_data['projects']
     mode_instructions = technical_mode if audience_mode == 'technical' else recruiter_mode
-    return chatbot_instructions.format(technical_mode=mode_instructions, projects=_projects)
+    return chatbot_instructions.format(bio=bio, technical_mode=mode_instructions, projects=projects)
