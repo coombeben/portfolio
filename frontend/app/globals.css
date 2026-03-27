@@ -533,10 +533,19 @@ body.modal-open {
   }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 640px) {
+  :root {
+    --header-height: 130px;
+  }
+
   .appHeader {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .appHeader__link {
+    width: 100%;
+    justify-content: center;
   }
 
   .chatShell {
@@ -548,20 +557,9 @@ body.modal-open {
   .copilotKitUserMessage {
     max-width: 100%;
   }
-}
 
-@media (max-width: 640px) {
   .portfolioApp {
     padding: 0;
-  }
-
-  .chatShell {
-    padding: 22px 18px 32px;
-  }
-
-  .appHeader__link {
-    width: 100%;
-    justify-content: center;
   }
 }
 
